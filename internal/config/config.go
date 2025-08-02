@@ -8,11 +8,18 @@ import (
 )
 
 type Config struct {
+	App      AppConfig
 	Server   ServerConfig
 	Database DatabaseConfig
 	JWT      JWTConfig
 	Security SecurityConfig
-	CORS     CORSConfig 
+	CORS     CORSConfig
+	Resend   ResendConfig
+}
+
+// AppConfig holds general application settings.
+type AppConfig struct {
+	ClientURL string
 }
 
 type ServerConfig struct {
@@ -54,8 +61,17 @@ type CORSConfig struct {
 	AllowCredentials bool
 }
 
+type ResendConfig struct {
+	APIKey    string
+	FromEmail string
+	FromName  string
+}
+
 func Load() (*Config, error) {
     return &Config{
+        App: AppConfig{
+			ClientURL: getEnv("CLIENT_URL", "http://localhost:3000"),
+		},
 		Server: ServerConfig{
 			Port:            getEnv("PORT", "8080"),
 			Env:             getEnv("ENV", "development"),
@@ -89,6 +105,11 @@ func Load() (*Config, error) {
 			AllowedMethods:   strings.Split(getEnv("CORS_ALLOWED_METHODS", "GET,POST,PUT,DELETE,OPTIONS"), ","),
 			AllowedHeaders:   strings.Split(getEnv("CORS_ALLOWED_HEADERS", "Accept,Authorization,Content-Type"), ","),
 			AllowCredentials: getEnvAsBool("CORS_ALLOW_CREDENTIALS", true),
+		},
+        Resend: ResendConfig{
+			APIKey:    getEnv("RESEND_API_KEY", ""),
+			FromEmail: getEnv("RESEND_FROM_EMAIL", "onboarding@resend.dev"),
+			FromName:  getEnv("RESEND_FROM_NAME", "GoChat"),
 		},
     }, nil
     

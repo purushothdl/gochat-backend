@@ -17,6 +17,7 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
+	github.com/resend/resend-go/v2 v2.21.0
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/crypto v0.40.0
 	golang.org/x/sync v0.16.0 // indirect

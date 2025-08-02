@@ -6,30 +6,43 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/purushothdl/gochat-backend/internal/config"
 	"github.com/purushothdl/gochat-backend/internal/shared/types"
 	"github.com/purushothdl/gochat-backend/pkg/auth"
+	"github.com/purushothdl/gochat-backend/pkg/utils/tokenutil"
 )
 
 const MaxDevicesPerUser = 5
 
 type Service struct {
-    authRepo Repository
-    userRepo UserRepository
-    config   *config.Config
-    logger   *slog.Logger
+    authRepo          Repository
+    userRepo          UserRepository
+    config            *config.Config
+    logger            *slog.Logger
+    passwordResetRepo PasswordResetRepository
+    emailService      EmailService
 }
 
-func NewService(authRepo Repository, userRepo UserRepository, cfg *config.Config, logger *slog.Logger) *Service {
-    return &Service{
-        authRepo: authRepo,
-        userRepo: userRepo,
-        config:   cfg,
-        logger:   logger,
-    }
+func NewService(
+	authRepo          Repository,
+	userRepo          UserRepository,
+	passwordResetRepo PasswordResetRepository,
+	emailService      EmailService,
+	cfg               *config.Config,
+	logger            *slog.Logger,
+) *Service {
+	return &Service{
+		authRepo:          authRepo,
+		userRepo:          userRepo,
+		passwordResetRepo: passwordResetRepo,
+		emailService:      emailService,
+		config:            cfg,
+		logger:            logger,
+	}
 }
 
 // ============================================================================
@@ -150,6 +163,85 @@ func (s *Service) GetMe(ctx context.Context, userID string) (*MeResponse, error)
             CreatedAt:  user.CreatedAt,
         },
     }, nil
+}
+
+// ForgotPassword generates a reset token and sends it via email.
+func (s *Service) ForgotPassword(ctx context.Context, email string) error {
+	user, err := s.userRepo.GetByEmailShared(ctx, email)
+	if err != nil {
+		// Do not leak whether the user exists. Log internally and return success.
+		s.logger.Info("password reset requested for non-existent user", "email", email)
+		return nil
+	}
+
+	plaintext, hash, err := tokenutil.Generate()
+	if err != nil {
+		s.logger.Error("failed to generate password reset token", "error", err)
+		return err
+	}
+
+	// Store the hashed token with a 1-hour expiry.
+	expiresAt := time.Now().Add(1 * time.Hour)
+	if err := s.passwordResetRepo.Store(ctx, user.ID, hash, expiresAt); err != nil {
+		s.logger.Error("failed to store password reset token", "user_id", user.ID, "error", err)
+		return err
+	}
+
+	// Construct the reset link.
+	resetURL, err := url.Parse(s.config.App.ClientURL)
+	if err != nil {
+		s.logger.Error("invalid client url in config", "url", s.config.App.ClientURL, "error", err)
+		return err
+	}
+	resetURL.Path = "/reset-password"
+	query := resetURL.Query()
+	query.Set("token", plaintext)
+	resetURL.RawQuery = query.Encode()
+
+	// Send the email in a separate goroutine to not block the HTTP response.
+	go func() {
+		err := s.emailService.SendPasswordResetEmail(context.Background(), user.Email, user.Name, resetURL.String())
+		if err != nil {
+			s.logger.Error("failed to send password reset email", "user_id", user.ID, "error", err)
+		}
+	}()
+
+	return nil
+}
+
+// ResetPassword validates the token and sets a new password for the user.
+func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) error {
+	tokenHash := tokenutil.Hash(token)
+
+	resetToken, err := s.passwordResetRepo.FindByTokenHash(ctx, tokenHash)
+	if err != nil {
+		return ErrInvalidToken
+	}
+
+	if time.Now().After(resetToken.ExpiresAt) {
+		return ErrTokenExpired
+	}
+
+	hashedPassword, err := auth.HashPassword(newPassword, s.config.Security.BcryptCost)
+	if err != nil {
+		s.logger.Error("failed to hash new password during reset", "user_id", resetToken.UserID, "error", err)
+		return err
+	}
+
+	if err := s.userRepo.UpdatePassword(ctx, resetToken.UserID, hashedPassword); err != nil {
+		s.logger.Error("failed to update password during reset", "user_id", resetToken.UserID, "error", err)
+		return err
+	}
+
+	// Invalidate the token immediately after use.
+	go func() {
+		if err := s.passwordResetRepo.Delete(context.Background(), tokenHash); err != nil {
+			s.logger.Error("failed to delete used password reset token", "token_hash", tokenHash, "error", err)
+		}
+	}()
+
+	s.logger.Info("user password reset successfully", "user_id", resetToken.UserID)
+	return nil
 }
 
 func (s *Service) Logout(ctx context.Context, refreshTokenString string) error {

@@ -2,15 +2,16 @@
 package postgres
 
 import (
-    "context"
-    "database/sql"
-    "encoding/json"
-    "fmt"
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
 
-    "github.com/google/uuid"
-    "github.com/jackc/pgx/v5/pgxpool"
-    "github.com/purushothdl/gochat-backend/internal/domain/user"
-    "github.com/purushothdl/gochat-backend/internal/shared/types"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/purushothdl/gochat-backend/internal/domain/user"
+	"github.com/purushothdl/gochat-backend/internal/shared/types"
 )
 
 type UserRepository struct {
@@ -158,6 +159,21 @@ func (r *UserRepository) GetPasswordHash(ctx context.Context, userID string) (st
     var hash string
     err := r.pool.QueryRow(ctx, query, userID).Scan(&hash)
     return hash, err
+}
+
+func (r *UserRepository) UpdatePassword(ctx context.Context, userID string, newPasswordHash string) error {
+	query := `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`
+
+	result, err := r.pool.Exec(ctx, query, newPasswordHash, userID)
+	if err != nil {
+		return fmt.Errorf("failed to execute password update: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return errors.New("user not found for password update")
+	}
+
+	return nil
 }
 
 // ============================================================================

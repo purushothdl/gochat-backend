@@ -126,3 +126,37 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 
 	response.JSON(w, http.StatusOK, result)
 }
+
+func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req ForgotPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, err)
+		return
+	}
+
+	// The service handles all logic. We deliberately don't return an error
+	// to prevent user enumeration attacks.
+	if err := h.service.ForgotPassword(r.Context(), req.Email); err != nil {
+		response.Error(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, response.MessageResponse{
+		Message: "If an account with that email exists, we have sent a password reset link.",
+	})
+}
+
+func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var req ResetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, err)
+		return
+	}
+
+	if err := h.service.ResetPassword(r.Context(), req.Token, req.Password); err != nil {
+		response.Error(w, http.StatusBadRequest, err) 
+		return
+	}
+
+	response.JSON(w, http.StatusOK, response.MessageResponse{Message: "Your password has been reset successfully."})
+}

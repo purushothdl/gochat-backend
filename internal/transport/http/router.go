@@ -54,6 +54,8 @@ func (rt *Router) SetupRoutes(cfg *config.Config, logger *slog.Logger) *chi.Mux 
 			r.Post("/login", rt.authHandler.Login)
 			r.Post("/refresh", rt.authHandler.RefreshToken)
 			r.Post("/logout", rt.authHandler.Logout)
+            r.Post("/forgot-password", rt.authHandler.ForgotPassword)
+            r.Post("/reset-password", rt.authHandler.ResetPassword) 
 			r.With(rt.authMw.RequireAuth).Get("/me", rt.authHandler.Me)
 		})
 
