@@ -171,6 +171,9 @@ func (s *Service) LogoutAllDevices(ctx context.Context, userID string) error {
 
 func (s *Service) generateAuthResponse(ctx context.Context, user *types.User, w http.ResponseWriter, deviceInfo, ipAddress, userAgent string) (*AuthenticationResponse, error) {
     // Generate access token
+    // Inside generateAuthResponse
+    s.logger.Info("Generating access token", "userID", user.ID, "email", user.Email)
+
     accessToken, err := auth.GenerateAccessToken(
         user.ID, user.Email, s.config.JWT.Secret, s.config.JWT.AccessTokenExpiry,
     )

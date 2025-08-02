@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/purushothdl/gochat-backend/internal/shared/response"
+    authMiddleware "github.com/purushothdl/gochat-backend/internal/transport/http/middleware" 
 )
 
 type Handler struct {
@@ -22,7 +23,7 @@ func NewHandler(service *Service, logger *slog.Logger) *Handler {
 
 
 func (h *Handler) GetProfile(w http.ResponseWriter, r *http.Request) {
-    userID, ok := r.Context().Value("user_id").(string)
+    userID, ok := authMiddleware.GetUserID(r.Context())
     if !ok {
         response.Error(w, http.StatusUnauthorized, ErrPermissionDenied)
         return
@@ -38,7 +39,7 @@ func (h *Handler) GetProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
-    userID, ok := r.Context().Value("user_id").(string)
+    userID, ok := authMiddleware.GetUserID(r.Context())
     if !ok {
         response.Error(w, http.StatusUnauthorized, ErrPermissionDenied)
         return
@@ -60,7 +61,7 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
-    userID, ok := r.Context().Value("user_id").(string)
+    userID, ok := authMiddleware.GetUserID(r.Context())
     if !ok {
         response.Error(w, http.StatusUnauthorized, ErrPermissionDenied)
         return
@@ -82,7 +83,7 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := authMiddleware.GetUserID(r.Context())
 	if !ok {
 		h.logger.Error("user_id not found in context for authenticated route")
 		response.Error(w, http.StatusUnauthorized, ErrPermissionDenied)

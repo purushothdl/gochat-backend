@@ -10,9 +10,9 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-type contextKey string
+type loggerContextKey string
 
-const loggerKey = contextKey("logger")
+const loggerKey = loggerContextKey("logger")
 
 // WithLogger returns a middleware that injects a logger into the request context.
 func WithLogger(logger *slog.Logger) func(http.Handler) http.Handler {
