@@ -1,21 +1,27 @@
 package config
 
 import (
-    "os"
-    "strconv"
-    "time"
+	"os"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type Config struct {
-    Server   ServerConfig
-    Database DatabaseConfig
-    JWT      JWTConfig
-    Security SecurityConfig
+	Server   ServerConfig
+	Database DatabaseConfig
+	JWT      JWTConfig
+	Security SecurityConfig
+	CORS     CORSConfig 
 }
 
 type ServerConfig struct {
-    Port string
-    Env  string
+	Port            string
+	Env             string
+	ReadTimeout     time.Duration // Time for reading the entire request
+	WriteTimeout    time.Duration // Time for writing the entire response
+	IdleTimeout     time.Duration // Time for a keep-alive connection to be idle
+	ShutdownTimeout time.Duration // Max time for graceful shutdown
 }
 
 type DatabaseConfig struct {
@@ -41,11 +47,22 @@ type SecurityConfig struct {
     BcryptCost int
 }
 
+type CORSConfig struct {
+	AllowedOrigins   []string
+	AllowedMethods   []string
+	AllowedHeaders   []string
+	AllowCredentials bool
+}
+
 func Load() (*Config, error) {
     return &Config{
-        Server: ServerConfig{
-            Port: getEnv("PORT", "8080"),
-            Env:  getEnv("ENV", "development"),
+		Server: ServerConfig{
+			Port:            getEnv("PORT", "8080"),
+			Env:             getEnv("ENV", "development"),
+			ReadTimeout:     parseDuration("SERVER_READ_TIMEOUT", "5s"),
+			WriteTimeout:    parseDuration("SERVER_WRITE_TIMEOUT", "10s"),
+			IdleTimeout:     parseDuration("SERVER_IDLE_TIMEOUT", "120s"),
+			ShutdownTimeout: parseDuration("SERVER_SHUTDOWN_TIMEOUT", "30s"),
         },
         Database: DatabaseConfig{
             URL:             getEnv("DATABASE_URL", ""),
@@ -67,7 +84,14 @@ func Load() (*Config, error) {
         Security: SecurityConfig{
             BcryptCost: parseInt("BCRYPT_COST", 12),
         },
+        CORS: CORSConfig{
+			AllowedOrigins:   strings.Split(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173"), ","),
+			AllowedMethods:   strings.Split(getEnv("CORS_ALLOWED_METHODS", "GET,POST,PUT,DELETE,OPTIONS"), ","),
+			AllowedHeaders:   strings.Split(getEnv("CORS_ALLOWED_HEADERS", "Accept,Authorization,Content-Type"), ","),
+			AllowCredentials: getEnvAsBool("CORS_ALLOW_CREDENTIALS", true),
+		},
     }, nil
+    
 }
 
 func getEnv(key, defaultValue string) string {
@@ -94,4 +118,13 @@ func parseInt(key string, defaultValue int) int {
         }
     }
     return defaultValue
+}
+
+func getEnvAsBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if b, err := strconv.ParseBool(value); err == nil {
+			return b
+		}
+	}
+	return defaultValue
 }

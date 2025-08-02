@@ -47,22 +47,28 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*user.Us
     return r.scanDomainUser(ctx, query, email)
 }
 
+
 func (r *UserRepository) Update(ctx context.Context, u *user.User) error {
-    settingsJSON, _ := json.Marshal(u.Settings)
-    
-    query := `
-        UPDATE users 
-        SET name = $2, image_url = $3, settings = $4, updated_at = NOW()
-        WHERE id = $1 AND deleted_at IS NULL
-        RETURNING updated_at
-    `
-    
-    err := r.pool.QueryRow(ctx, query, u.ID, u.Name, u.ImageURL, settingsJSON).Scan(&u.UpdatedAt)
-    if err != nil {
-        return fmt.Errorf("failed to update user: %w", err)
-    }
-    
-    return nil
+	settingsJSON, err := json.Marshal(u.Settings)
+	if err != nil {
+		return fmt.Errorf("failed to marshal user settings: %w", err)
+	}
+
+	query := `
+		UPDATE users SET
+			name = $2,
+			image_url = $3,
+			password_hash = $4,
+			settings = $5
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+
+	_, err = r.pool.Exec(ctx, query, u.ID, u.Name, u.ImageURL, u.PasswordHash, settingsJSON)
+	if err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+
+	return nil
 }
 
 func (r *UserRepository) Delete(ctx context.Context, id string) error {
@@ -72,7 +78,7 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 }
 
 // ============================================================================
-// AUTH DOMAIN METHODS (Returns types.User - shared types)
+// OTHER DOMAIN METHODS (Returns types.User - shared types)
 // ============================================================================
 
 func (r *UserRepository) GetByEmailShared(ctx context.Context, email string) (*types.User, error) {
@@ -97,17 +103,24 @@ func (r *UserRepository) GetByIDShared(ctx context.Context, id string) (*types.U
 
 func (r *UserRepository) Create(ctx context.Context, userData *types.CreateUserData) (*types.User, error) {
     userID := uuid.New().String()
-    
+
+    defaultSettings := user.NewDefaultUserSettings()
+    settingsJSON, err := json.Marshal(defaultSettings)
+    if err != nil {
+        // This is an internal error, should not happen with a valid struct
+        return nil, fmt.Errorf("failed to marshal default settings: %w", err)
+    }
+
     query := `
         INSERT INTO users (id, email, name, password_hash, is_verified, settings)
-        VALUES ($1, $2, $3, $4, false, '{}')
+        VALUES ($1, $2, $3, $4, false, $5) -- Use a parameter for settings
         RETURNING id, email, name, image_url, created_at, updated_at, is_verified
     `
     
     var u types.User
     var imageURL sql.NullString  
     
-    err := r.pool.QueryRow(ctx, query, userID, userData.Email, userData.Name, userData.Password).Scan(
+    err = r.pool.QueryRow(ctx, query, userID, userData.Email, userData.Name, userData.Password, settingsJSON).Scan(
         &u.ID, &u.Email, &u.Name, &imageURL, &u.CreatedAt, &u.UpdatedAt, &u.IsVerified,
     )
     
@@ -151,7 +164,7 @@ func (r *UserRepository) GetPasswordHash(ctx context.Context, userID string) (st
 // PRIVATE HELPER METHODS
 // ============================================================================
 
-func (r *UserRepository) scanDomainUser(ctx context.Context, query string, args ...interface{}) (*user.User, error) {
+func (r *UserRepository) scanDomainUser(ctx context.Context, query string, args ...any) (*user.User, error) {
     var u user.User
     var settingsJSON []byte
     var imageURL sql.NullString  
@@ -191,7 +204,7 @@ func (r *UserRepository) scanDomainUser(ctx context.Context, query string, args 
     return &u, nil
 }
 
-func (r *UserRepository) scanSharedUser(ctx context.Context, query string, args ...interface{}) (*types.User, error) {
+func (r *UserRepository) scanSharedUser(ctx context.Context, query string, args ...any) (*types.User, error) {
     var u types.User
     var imageURL sql.NullString  
     var lastLogin sql.NullTime

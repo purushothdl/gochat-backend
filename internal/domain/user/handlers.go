@@ -1,19 +1,25 @@
 package user
 
 import (
-    "encoding/json"
-    "net/http"
+	"encoding/json"
+	"log/slog"
+	"net/http"
 
-    "github.com/purushothdl/gochat-backend/internal/shared/response"
+	"github.com/purushothdl/gochat-backend/internal/shared/response"
 )
 
 type Handler struct {
-    service *Service
+	service *Service
+	logger  *slog.Logger 
 }
 
-func NewHandler(service *Service) *Handler {
-    return &Handler{service: service}
+func NewHandler(service *Service, logger *slog.Logger) *Handler {
+	return &Handler{
+		service: service,
+		logger:  logger, 
+	}
 }
+
 
 func (h *Handler) GetProfile(w http.ResponseWriter, r *http.Request) {
     userID, ok := r.Context().Value("user_id").(string)
@@ -76,22 +82,25 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
-    userID, ok := r.Context().Value("user_id").(string)
-    if !ok {
-        response.Error(w, http.StatusUnauthorized, ErrPermissionDenied)
-        return
-    }
+	userID, ok := r.Context().Value("user_id").(string)
+	if !ok {
+		h.logger.Error("user_id not found in context for authenticated route")
+		response.Error(w, http.StatusUnauthorized, ErrPermissionDenied)
+		return
+	}
 
-    var req ChangePasswordRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        response.Error(w, http.StatusBadRequest, err)
-        return
-    }
+	var req ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Warn("failed to decode change password request", "error", err, "user_id", userID)
+		response.Error(w, http.StatusBadRequest, err)
+		return
+	}
 
-    if err := h.service.ChangePassword(r.Context(), userID, req); err != nil {
-        response.Error(w, http.StatusBadRequest, err)
-        return
-    }
+	// The service layer handles all business logic and validation.
+	if err := h.service.ChangePassword(r.Context(), userID, req); err != nil {
+		response.Error(w, http.StatusBadRequest, err)
+		return
+	}
 
-    response.JSON(w, http.StatusOK, map[string]string{"message": "Password changed successfully"})
+	response.JSON(w, http.StatusOK, response.MessageResponse{Message: "Password changed successfully"})
 }

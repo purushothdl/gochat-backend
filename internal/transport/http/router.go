@@ -1,74 +1,70 @@
 package http
 
 import (
-    "net/http"
+	"log/slog"
+	"net/http"
+	"time"
 
-    "github.com/gorilla/mux"
-    "github.com/purushothdl/gochat-backend/internal/domain/auth"
-    "github.com/purushothdl/gochat-backend/internal/domain/user"
-    "github.com/purushothdl/gochat-backend/internal/transport/http/middleware"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/purushothdl/gochat-backend/internal/config"
+	"github.com/purushothdl/gochat-backend/internal/domain/auth"
+	"github.com/purushothdl/gochat-backend/internal/domain/user"
+	app_middleware "github.com/purushothdl/gochat-backend/internal/transport/http/middleware"
 )
 
 type Router struct {
-    authHandler *auth.Handler
-    userHandler *user.Handler
-    authMw      *middleware.AuthMiddleware
+	authHandler *auth.Handler
+	userHandler *user.Handler
+	authMw      *app_middleware.AuthMiddleware
 }
 
-func NewRouter(authHandler *auth.Handler, userHandler *user.Handler, authMw *middleware.AuthMiddleware) *Router {
-    return &Router{
-        authHandler: authHandler,
-        userHandler: userHandler,
-        authMw:      authMw,
-    }
+func NewRouter(authHandler *auth.Handler, userHandler *user.Handler, authMw *app_middleware.AuthMiddleware) *Router {
+	return &Router{
+		authHandler: authHandler,
+		userHandler: userHandler,
+		authMw:      authMw,
+	}
 }
 
-func (rt *Router) SetupRoutes() *mux.Router {
-    r := mux.NewRouter()
+// The order is important: recovery -> cors -> logger -> request logger -> timeout.
+func (rt *Router) mountMiddlewares(r *chi.Mux, cfg *config.Config, logger *slog.Logger) {
+	r.Use(app_middleware.Recoverer(logger))
+	r.Use(app_middleware.CORS(&cfg.CORS))
+	r.Use(app_middleware.WithLogger(logger))
+	r.Use(app_middleware.RequestLogger)
+	r.Use(middleware.Timeout(60 * time.Second))
+}
 
-    // API prefix
-    api := r.PathPrefix("/api").Subrouter()
+func (rt *Router) SetupRoutes(cfg *config.Config, logger *slog.Logger) *chi.Mux {
+	r := chi.NewMux()
 
-    // Health check
-    api.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-        w.Header().Set("Content-Type", "application/json")
-        w.WriteHeader(http.StatusOK)
-        w.Write([]byte(`{"status": "ok", "service": "gochat-backend"}`))
-    }).Methods("GET")
+	rt.mountMiddlewares(r, cfg, logger)
 
-    // Auth routes (public)
-    authRoutes := api.PathPrefix("/auth").Subrouter()
-    authRoutes.HandleFunc("/register", rt.authHandler.Register).Methods("POST")
-    authRoutes.HandleFunc("/login", rt.authHandler.Login).Methods("POST")
-    authRoutes.HandleFunc("/refresh", rt.authHandler.RefreshToken).Methods("POST")
-    authRoutes.HandleFunc("/logout", rt.authHandler.Logout).Methods("POST")
-    
-    // Protected auth routes
-    authRoutes.HandleFunc("/me", rt.authMw.RequireAuth(rt.authHandler.Me)).Methods("GET")
+	// Health check route
+	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"ok"}`))
+	})
 
-    // User routes (all protected)
-    userRoutes := api.PathPrefix("/user").Subrouter()
-    userRoutes.HandleFunc("/profile", rt.authMw.RequireAuth(rt.userHandler.GetProfile)).Methods("GET")
-    userRoutes.HandleFunc("/profile", rt.authMw.RequireAuth(rt.userHandler.UpdateProfile)).Methods("PUT")
-    userRoutes.HandleFunc("/settings", rt.authMw.RequireAuth(rt.userHandler.UpdateSettings)).Methods("PUT")
-    userRoutes.HandleFunc("/password", rt.authMw.RequireAuth(rt.userHandler.ChangePassword)).Methods("PUT")
+	// API routes
+	r.Route("/api", func(r chi.Router) {
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/register", rt.authHandler.Register)
+			r.Post("/login", rt.authHandler.Login)
+			r.Post("/refresh", rt.authHandler.RefreshToken)
+			r.Post("/logout", rt.authHandler.Logout)
+			r.With(rt.authMw.RequireAuth).Get("/me", rt.authHandler.Me)
+		})
 
-    // CORS middleware for development
-    r.Use(func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            w.Header().Set("Access-Control-Allow-Origin", "*")
-            w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-            w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-            w.Header().Set("Access-Control-Allow-Credentials", "true")
+		r.Route("/user", func(r chi.Router) {
+			r.Use(rt.authMw.RequireAuth)
+			r.Get("/profile", rt.userHandler.GetProfile)
+			r.Put("/profile", rt.userHandler.UpdateProfile)
+			r.Put("/settings", rt.userHandler.UpdateSettings)
+			r.Put("/password", rt.userHandler.ChangePassword)
+		})
+	})
 
-            if r.Method == "OPTIONS" {
-                w.WriteHeader(http.StatusOK)
-                return
-            }
-
-            next.ServeHTTP(w, r)
-        })
-    })
-
-    return r
+	return r
 }

@@ -4,6 +4,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -19,17 +20,23 @@ type Service struct {
     authRepo Repository
     userRepo UserRepository
     config   *config.Config
+    logger   *slog.Logger
 }
 
-func NewService(authRepo Repository, userRepo UserRepository, cfg *config.Config) *Service {
+func NewService(authRepo Repository, userRepo UserRepository, cfg *config.Config, logger *slog.Logger) *Service {
     return &Service{
         authRepo: authRepo,
         userRepo: userRepo,
         config:   cfg,
+        logger:   logger,
     }
 }
 
-func (s *Service) Login(ctx context.Context, req LoginRequest, w http.ResponseWriter, deviceInfo, ipAddress, userAgent string) (*LoginResponse, error) {
+// ============================================================================
+//  Public Methods (The Service's API)
+// ============================================================================
+
+func (s *Service) Login(ctx context.Context, req LoginRequest, w http.ResponseWriter, deviceInfo, ipAddress, userAgent string) (*AuthenticationResponse, error) {
     // Get user 
     user, err := s.userRepo.GetByEmailShared(ctx, req.Email)
     if err != nil {
@@ -53,7 +60,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest, w http.ResponseWr
     return s.generateAuthResponse(ctx, user, w, deviceInfo, ipAddress, userAgent)
 }
 
-func (s *Service) Register(ctx context.Context, req RegisterRequest, w http.ResponseWriter, deviceInfo, ipAddress, userAgent string) (*RegisterResponse, error) {
+func (s *Service) Register(ctx context.Context, req RegisterRequest, w http.ResponseWriter, deviceInfo, ipAddress, userAgent string) (*AuthenticationResponse, error) {
     // Check if user exists
     exists, err := s.userRepo.ExistsByEmail(ctx, req.Email)
     if err != nil {
@@ -81,21 +88,88 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest, w http.Resp
         return nil, err
     }
     
-    // Generate tokens and set cookie
-    loginResp, err := s.generateAuthResponse(ctx, user, w, deviceInfo, ipAddress, userAgent)
+    return s.generateAuthResponse(ctx, user, w, deviceInfo, ipAddress, userAgent)
+}
+
+func (s *Service) RefreshAccessToken(ctx context.Context, refreshTokenString, deviceInfo, ipAddress, userAgent string) (*RefreshTokenResponse, error) {
+    tokenHash := auth.HashRefreshToken(refreshTokenString)
+    
+    // Get refresh token from database
+    refreshToken, err := s.authRepo.GetRefreshToken(ctx, tokenHash)
     if err != nil {
-        return nil, err
+        return nil, ErrRefreshTokenNotFound
     }
     
-    return &RegisterResponse{
-        AccessToken: loginResp.AccessToken,
-        ExpiresAt:   loginResp.ExpiresAt,
-        User:        loginResp.User,
+    // Check if token is expired 
+    if refreshToken.ExpiresAt.Before(time.Now()) {
+        s.authRepo.DeleteRefreshToken(ctx, tokenHash)
+        return nil, ErrTokenExpired
+    }
+    
+    // Get user info to include email in JWT
+    user, err := s.userRepo.GetByIDShared(ctx, refreshToken.UserID)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get user: %w", err)
+    }
+    
+    // Update token usage
+    if err := s.authRepo.UpdateRefreshTokenUsage(ctx, tokenHash); err != nil {
+        // Log error but continue
+    }
+    
+    // Generate new access token with user email
+    accessToken, err := auth.GenerateAccessToken(
+        user.ID,
+        user.Email,
+        s.config.JWT.Secret,
+        s.config.JWT.AccessTokenExpiry,
+    )
+    if err != nil {
+        return nil, fmt.Errorf("failed to generate access token: %w", err)
+    }
+    
+    return &RefreshTokenResponse{
+        AccessToken: accessToken,
+        ExpiresAt:   time.Now().Add(s.config.JWT.AccessTokenExpiry),
     }, nil
 }
 
-// PRIVATE: Generate tokens and set HTTP-only cookie
-func (s *Service) generateAuthResponse(ctx context.Context, user *types.User, w http.ResponseWriter, deviceInfo, ipAddress, userAgent string) (*LoginResponse, error) {
+func (s *Service) GetMe(ctx context.Context, userID string) (*MeResponse, error) {
+    user, err := s.userRepo.GetByIDShared(ctx, userID)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get user: %w", err)
+    }
+    
+    return &MeResponse{
+        User: UserInfo{
+            ID:         user.ID,
+            Email:      user.Email,
+            Name:       user.Name,
+            ImageURL:   user.ImageURL,
+            IsVerified: user.IsVerified,
+            CreatedAt:  user.CreatedAt,
+        },
+    }, nil
+}
+
+func (s *Service) Logout(ctx context.Context, refreshTokenString string) error {
+    if refreshTokenString == "" {
+        return nil // Already logged out
+    }
+    
+    tokenHash := auth.HashRefreshToken(refreshTokenString)
+    return s.authRepo.DeleteRefreshToken(ctx, tokenHash)
+}
+
+func (s *Service) LogoutAllDevices(ctx context.Context, userID string) error {
+    return s.authRepo.DeleteUserRefreshTokens(ctx, userID)
+}
+
+// ============================================================================
+//  Private Helper Methods (Implementation Details)
+// ============================================================================
+
+func (s *Service) generateAuthResponse(ctx context.Context, user *types.User, w http.ResponseWriter, deviceInfo, ipAddress, userAgent string) (*AuthenticationResponse, error) {
     // Generate access token
     accessToken, err := auth.GenerateAccessToken(
         user.ID, user.Email, s.config.JWT.Secret, s.config.JWT.AccessTokenExpiry,
@@ -131,7 +205,7 @@ func (s *Service) generateAuthResponse(ctx context.Context, user *types.User, w 
     // Set HTTP-only cookie with refresh token
     s.setRefreshTokenCookie(w, refreshTokenString)
     
-    return &LoginResponse{
+    return &AuthenticationResponse{
         AccessToken: accessToken,
         ExpiresAt:   time.Now().Add(s.config.JWT.AccessTokenExpiry),
         User: UserInfo{
@@ -171,80 +245,4 @@ func (s *Service) enforceDeviceLimit(ctx context.Context, userID string) error {
     }
     
     return nil
-}
-
-func (s *Service) Logout(ctx context.Context, refreshTokenString string) error {
-    if refreshTokenString == "" {
-        return nil // Already logged out
-    }
-    
-    tokenHash := auth.HashRefreshToken(refreshTokenString)
-    return s.authRepo.DeleteRefreshToken(ctx, tokenHash)
-}
-
-func (s *Service) LogoutAllDevices(ctx context.Context, userID string) error {
-    return s.authRepo.DeleteUserRefreshTokens(ctx, userID)
-}
-
-func (s *Service) GetMe(ctx context.Context, userID string) (*MeResponse, error) {
-    user, err := s.userRepo.GetByIDShared(ctx, userID)
-    if err != nil {
-        return nil, fmt.Errorf("failed to get user: %w", err)
-    }
-    
-    return &MeResponse{
-        User: UserInfo{
-            ID:         user.ID,
-            Email:      user.Email,
-            Name:       user.Name,
-            ImageURL:   user.ImageURL,
-            IsVerified: user.IsVerified,
-            CreatedAt:  user.CreatedAt,
-        },
-    }, nil
-}
-
-
-func (s *Service) RefreshToken(ctx context.Context, refreshTokenString, deviceInfo, ipAddress, userAgent string) (*RefreshTokenResponse, error) {
-    // Hash the provided token to match with stored hash
-    tokenHash := auth.HashRefreshToken(refreshTokenString)
-    
-    // Get refresh token from database
-    refreshToken, err := s.authRepo.GetRefreshToken(ctx, tokenHash)
-    if err != nil {
-        return nil, ErrRefreshTokenNotFound
-    }
-    
-    // Check if token is expired (additional check)
-    if refreshToken.ExpiresAt.Before(time.Now()) {
-        s.authRepo.DeleteRefreshToken(ctx, tokenHash)
-        return nil, ErrTokenExpired
-    }
-    
-    // Get user info to include email in JWT
-    user, err := s.userRepo.GetByIDShared(ctx, refreshToken.UserID)
-    if err != nil {
-        return nil, fmt.Errorf("failed to get user: %w", err)
-    }
-    
-    // Update token usage
-    if err := s.authRepo.UpdateRefreshTokenUsage(ctx, tokenHash); err != nil {
-        // Log error but continue
-    }
-    
-    // Generate new access token with user email
-    accessToken, err := auth.GenerateAccessToken(
-        user.ID,
-        user.Email,
-        s.config.JWT.Secret,
-        s.config.JWT.AccessTokenExpiry,
-    )
-    if err != nil {
-        return nil, fmt.Errorf("failed to generate access token: %w", err)
-    }
-    
-    return &RefreshTokenResponse{
-        AccessToken: accessToken,
-        ExpiresAt:   time.Now().Add(s.config.JWT.AccessTokenExpiry),
-    }, nil
 }

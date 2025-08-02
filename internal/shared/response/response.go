@@ -10,7 +10,7 @@ import (
 
 type APIResponse struct {
     Success bool        `json:"success"`
-    Data    interface{} `json:"data,omitempty"`
+    Data    any         `json:"data,omitempty"`
     Error   *APIError   `json:"error,omitempty"`
 }
 
@@ -63,4 +63,8 @@ func Error(w http.ResponseWriter, status int, err error) {
     if err := json.NewEncoder(w).Encode(response); err != nil {
         log.Printf("Failed to encode error response: %v", err)
     }
+}
+
+type MessageResponse struct {
+    Message string `json:"message"`
 }

@@ -1,19 +1,24 @@
 package auth
 
 import (
-    "encoding/json"
-    "net/http"
-    "strings"
+	"encoding/json"
+	"log/slog"
+	"net/http"
 
-    "github.com/purushothdl/gochat-backend/internal/shared/response"
+	"github.com/purushothdl/gochat-backend/internal/shared/response"
+	"github.com/purushothdl/gochat-backend/pkg/utils/httputil"
 )
 
 type Handler struct {
-    service *Service
+	service *Service
+	logger  *slog.Logger 
 }
 
-func NewHandler(service *Service) *Handler {
-    return &Handler{service: service}
+func NewHandler(service *Service, logger *slog.Logger) *Handler {
+	return &Handler{
+		service: service,
+		logger:  logger, 
+	}
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +30,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
     // Get device info from headers and request
     deviceInfo := r.Header.Get("User-Agent")
-    ipAddress := h.getClientIP(r)
+    ipAddress := httputil.GetClientIP(r)
     userAgent := r.Header.Get("User-Agent")
 
     result, err := h.service.Register(r.Context(), req, w, deviceInfo, ipAddress, userAgent)
@@ -46,7 +51,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
     // Get device info
     deviceInfo := r.Header.Get("User-Agent")
-    ipAddress := h.getClientIP(r)
+    ipAddress := httputil.GetClientIP(r)
     userAgent := r.Header.Get("User-Agent")
 
     result, err := h.service.Login(r.Context(), req, w, deviceInfo, ipAddress, userAgent)
@@ -67,10 +72,10 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
     }
 
     deviceInfo := r.Header.Get("User-Agent")
-    ipAddress := h.getClientIP(r)
+    ipAddress := httputil.GetClientIP(r)
     userAgent := r.Header.Get("User-Agent")
 
-    result, err := h.service.RefreshToken(r.Context(), cookie.Value, deviceInfo, ipAddress, userAgent)
+    result, err := h.service.RefreshAccessToken(r.Context(), cookie.Value, deviceInfo, ipAddress, userAgent)
     if err != nil {
         response.Error(w, http.StatusUnauthorized, err)
         return
@@ -101,7 +106,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
         HttpOnly: true,
     })
 
-    response.JSON(w, http.StatusOK, LogoutResponse{Message: "Logged out successfully"})
+    response.JSON(w, http.StatusOK, response.MessageResponse{Message: "Logged out successfully"})
 }
 
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
@@ -119,40 +124,4 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
     }
 
     response.JSON(w, http.StatusOK, result)
-}
-
-// Helper method to get client IP
-func (h *Handler) getClientIP(r *http.Request) string {
-    // Check X-Forwarded-For header first
-    forwarded := r.Header.Get("X-Forwarded-For")
-    if forwarded != "" {
-        // Get first IP if multiple
-        ips := strings.Split(forwarded, ",")
-        return strings.TrimSpace(ips[0])
-    }
-
-    // Check X-Real-IP header
-    realIP := r.Header.Get("X-Real-IP")
-    if realIP != "" {
-        return realIP
-    }
-
-    // Fall back to RemoteAddr - but strip the port
-    remoteAddr := r.RemoteAddr
-    
-    // Handle IPv6 addresses like [::1]:65384
-    if strings.HasPrefix(remoteAddr, "[") {
-        // IPv6 format: [::1]:port
-        if idx := strings.LastIndex(remoteAddr, "]:"); idx != -1 {
-            return remoteAddr[1:idx] 
-        }
-    }
-    
-    // Handle IPv4 addresses like 127.0.0.1:65384
-    if idx := strings.LastIndex(remoteAddr, ":"); idx != -1 {
-        return remoteAddr[:idx] 
-    }
-    
-    // If no port found, return as is
-    return remoteAddr
 }

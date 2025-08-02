@@ -3,7 +3,6 @@ package user
 import (
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/purushothdl/gochat-backend/internal/shared/types"
 )
 
@@ -22,11 +21,18 @@ type User struct {
 }
 
 type UserSettings struct {
-    Theme                string `json:"theme" default:"light"`
-    NotificationsEnabled bool   `json:"notifications_enabled" default:"true"`
-    Language             string `json:"language" default:"en"`
+    Theme                string `json:"theme"`
+    NotificationsEnabled bool   `json:"notifications_enabled"`
+    Language             string `json:"language"`
 }
 
+func NewDefaultUserSettings() UserSettings {
+    return UserSettings{
+        Theme:                "light",
+        NotificationsEnabled: true,
+        Language:             "en",
+    }
+}
 
 func (u *User) ToSharedType() *types.User {
     return &types.User{
@@ -46,39 +52,5 @@ func (u *User) ToBasicUser() *types.BasicUser {
         ID:       u.ID,
         Name:     u.Name,
         ImageURL: u.ImageURL,
-    }
-}
-
-
-// Convert shared CreateUserData to domain User entity
-func FromCreateUserData(data *types.CreateUserData) *User {
-    return &User{
-        ID:           uuid.New().String(), 
-        Email:        data.Email,
-        Name:         data.Name,
-        PasswordHash: data.Password, 
-        Settings:     UserSettings{
-            Theme:                "light",
-            NotificationsEnabled: true,
-            Language:             "en",
-        },
-        IsVerified: false,
-        CreatedAt:  time.Now(),
-        UpdatedAt:  time.Now(),
-    }
-}
-
-// Convert shared User to domain User entity  
-func FromSharedUser(shared *types.User) *User {
-    return &User{
-        ID:         shared.ID,
-        Email:      shared.Email,
-        Name:       shared.Name,
-        ImageURL:   shared.ImageURL,
-        CreatedAt:  shared.CreatedAt,
-        UpdatedAt:  shared.UpdatedAt,
-        IsVerified: shared.IsVerified,
-        LastLogin:  shared.LastLogin,
-        // Password and Settings need separate handling
     }
 }

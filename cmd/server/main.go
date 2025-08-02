@@ -1,57 +1,56 @@
 package main
 
 import (
-    "log"
-    "net/http"
+	"fmt"
+	"log/slog"
+	"os"
 
-    "github.com/joho/godotenv"
-    "github.com/purushothdl/gochat-backend/internal/config"
-    "github.com/purushothdl/gochat-backend/internal/container"
-    "github.com/purushothdl/gochat-backend/internal/database"
-    httpTransport "github.com/purushothdl/gochat-backend/internal/transport/http"
+	"github.com/joho/godotenv"
+	"github.com/purushothdl/gochat-backend/internal/config"
+	"github.com/purushothdl/gochat-backend/internal/container"
+	"github.com/purushothdl/gochat-backend/internal/database"
+	httpTransport "github.com/purushothdl/gochat-backend/internal/transport/http"
 )
 
 func main() {
-    // Load environment variables
-    if err := godotenv.Load(); err != nil {
-        log.Printf("Warning: .env file not found: %v", err)
-    }
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-    // Load configuration
-    cfg, err := config.Load()
-    if err != nil {
-        log.Fatalf("Failed to load config: %v", err)
-    }
+	if err := run(logger); err != nil {
+		logger.Error("application startup error", "error", err)
+		os.Exit(1)
+	}
+}
 
-    // Connect to database
-    db, err := database.Connect(&cfg.Database)
-    if err != nil {
-        log.Fatalf("Failed to connect to database: %v", err)
-    }
-    defer db.Close()
+// run orchestrates the application startup, dependency injection, and server start.
+func run(logger *slog.Logger) error {
+	if err := godotenv.Load(); err != nil {
+		logger.Warn(".env file not found, using environment variables")
+	}
 
-    // Run migrations
-    migrationRunner := database.NewMigrationRunner(db)
-    if err := migrationRunner.RunMigrations(); err != nil {
-        log.Fatalf("Failed to run migrations: %v", err)
-    }
-    log.Println("Migrations completed successfully")
+	// Load core application configuration.
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
 
-    // Build container with dependencies
-    c := container.New(cfg, db)
-    if err := c.Build(); err != nil {
-        log.Fatalf("Failed to build container: %v", err)
-    }
+	// Establish database connection and run migrations.
+	db, err := database.Connect(&cfg.Database)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer db.Close()
 
-    // Setup router
-    router := httpTransport.NewRouter(c.AuthHandler, c.UserHandler, c.AuthMiddleware)
-    routes := router.SetupRoutes()
+	// Build the dependency injection container.
+	c := container.New(cfg, db, logger)
+	if err := c.Build(); err != nil {
+		return fmt.Errorf("failed to build container: %w", err)
+	}
 
-    // Start server
-    log.Printf("Server starting on port %s", cfg.Server.Port)
-    log.Printf("Health check: http://localhost:%s/api/health", cfg.Server.Port)
-    
-    if err := http.ListenAndServe(":"+cfg.Server.Port, routes); err != nil {
-        log.Fatalf("Failed to start server: %v", err)
-    }
+	// Set up the HTTP router with all routes and middleware.
+	router := httpTransport.NewRouter(c.AuthHandler, c.UserHandler, c.AuthMiddleware)
+	handler := router.SetupRoutes(cfg, logger)
+
+	// Create and run the server, which handles its own lifecycle.
+	srv := httpTransport.NewServer(cfg, logger, handler)
+	return srv.Run()
 }

@@ -7,16 +7,8 @@ type LoginRequest struct {
 
 type RegisterRequest struct {
     Email    string `json:"email" validate:"required,email"`
-    Name     string `json:"name" validate:"required,min=2"`
+    Name     string `json:"name" validate:"required,min=6"`
     Password string `json:"password" validate:"required,min=8"`
-}
-
-type RefreshTokenRequest struct {
-    // Refresh token will come from HTTP-only cookie, not request body
-}
-
-type LogoutRequest struct {
-    // Can be empty - token comes from cookie
 }
 
 type ForgotPasswordRequest struct {
