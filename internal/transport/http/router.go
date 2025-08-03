@@ -54,31 +54,40 @@ func (rt *Router) SetupRoutes(cfg *config.Config, logger *slog.Logger) *chi.Mux 
 	// API routes
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
-			r.Post("/register", rt.authHandler.Register)               // Register a new user
-			r.Post("/login", rt.authHandler.Login)                     // User login
-			r.Post("/refresh", rt.authHandler.RefreshToken)            // Refresh access token
-			r.Post("/logout", rt.authHandler.Logout)                   // User logout
-			r.Post("/forgot-password", rt.authHandler.ForgotPassword)  // Initiate password reset
-			r.Post("/reset-password", rt.authHandler.ResetPassword)    // Complete password reset
+			r.Post("/register", rt.authHandler.Register)                // Register a new user
+			r.Post("/login", rt.authHandler.Login)                      // User login
+			r.Post("/refresh", rt.authHandler.RefreshToken)             // Refresh access token
+			r.Post("/logout", rt.authHandler.Logout)                    // User logout
+			r.Post("/forgot-password", rt.authHandler.ForgotPassword)   // Initiate password reset
+			r.Post("/reset-password", rt.authHandler.ResetPassword)     // Complete password reset
 			r.With(rt.authMw.RequireAuth).Get("/me", rt.authHandler.Me) // Get current user info
 		})
 
 		r.Route("/user", func(r chi.Router) {
 			r.Use(rt.authMw.RequireAuth)
-			r.Get("/profile", rt.userHandler.GetProfile)               // Get user profile
-			r.Put("/profile", rt.userHandler.UpdateProfile)            // Update user profile
-			r.Put("/settings", rt.userHandler.UpdateSettings)          // Update user settings
-			r.Put("/password", rt.userHandler.ChangePassword)          // Change user password
+			r.Get("/profile", rt.userHandler.GetProfile)      // Get user profile
+			r.Put("/profile", rt.userHandler.UpdateProfile)   // Update user profile
+			r.Put("/settings", rt.userHandler.UpdateSettings) // Update user settings
+			r.Put("/password", rt.userHandler.ChangePassword) // Change user password
 		})
 
 		r.Route("/rooms", func(r chi.Router) {
 			r.Use(rt.authMw.RequireAuth)
-			r.Post("/", rt.roomHandler.CreateRoom)                     // Create a new room
-			r.Post("/{room_id}/invite", rt.roomHandler.InviteUser)     // Invite user to a room
-			r.Get("/", rt.roomHandler.ListUserRooms)                   // List rooms for the authenticated user
-			r.Get("/public", rt.roomHandler.ListPublicRooms)           // List all public rooms
-			r.Get("/{room_id}/members", rt.roomHandler.ListMembers)    // List members of a specific room
-			r.Post("/{room_id}/join", rt.roomHandler.JoinPublicRoom)   // Join a public room
+
+			// Room management
+			r.Post("/", rt.roomHandler.CreateRoom)           // Create a new room
+			r.Get("/", rt.roomHandler.ListUserRooms)         // List rooms for the authenticated user
+			r.Get("/public", rt.roomHandler.ListPublicRooms) // List all public rooms
+
+			// Room membership
+			r.Post("/{room_id}/invite", rt.roomHandler.InviteUser)   // Invite user to a room
+			r.Post("/{room_id}/join", rt.roomHandler.JoinPublicRoom) // Join a public room
+
+			// Member management
+			r.Get("/{room_id}/members", rt.roomHandler.ListMembers)                // List members of a specific room
+			r.Put("/{room_id}/members/{user_id}", rt.roomHandler.UpdateMemberRole) // Update a member's role
+			r.Delete("/{room_id}/members/{user_id}", rt.roomHandler.RemoveMember)  // Remove a member from a room
+			r.Delete("/{room_id}/members/me", rt.roomHandler.LeaveRoom)            // Authenticated user leaves a room
 		})
 	})
 

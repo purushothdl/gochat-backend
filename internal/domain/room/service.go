@@ -142,3 +142,78 @@ func (s *Service) ListMembers(ctx context.Context, requesterID, roomID string) (
 	}
 	return s.roomRepo.ListMembers(ctx, roomID)
 }
+
+// UpdateMemberRole changes the role of a user within a room.
+func (s *Service) UpdateMemberRole(ctx context.Context, actorID, roomID, targetUserID string, newRole MemberRole) error {
+	// 1. Authorize: Ensure the actor is an admin.
+	actorMembership, err := s.roomRepo.FindMembership(ctx, roomID, actorID)
+	if err != nil {
+		return err
+	}
+	if actorMembership.Role != AdminRole {
+		return ErrNotAdmin
+	}
+    
+    // Prevent an admin from demoting themselves if they are the last one.
+    if actorID == targetUserID && newRole != AdminRole {
+        adminCount, err := s.roomRepo.CountAdmins(ctx, roomID)
+        if err != nil {
+            return err
+        }
+        if adminCount <= 1 {
+            return errors.New("LAST_ADMIN", "You cannot demote yourself as the last admin.", 403)
+        }
+    }
+
+	// 2. Find the target user's membership to update.
+	targetMembership, err := s.roomRepo.FindMembership(ctx, roomID, targetUserID)
+	if err != nil {
+		return err 
+	}
+
+	// 3. Update and save.
+	targetMembership.Role = newRole
+	return s.roomRepo.UpdateMembership(ctx, targetMembership)
+}
+
+// RemoveMember kicks a user from a room.
+func (s *Service) RemoveMember(ctx context.Context, actorID, roomID, targetUserID string) error {
+	// 1. Authorize: Ensure the actor is an admin.
+	actorMembership, err := s.roomRepo.FindMembership(ctx, roomID, actorID)
+	if err != nil {
+		return err
+	}
+	if actorMembership.Role != AdminRole {
+		return ErrNotAdmin
+	}
+    
+    // An admin cannot kick themselves. They must use the LeaveRoom functionality.
+    if actorID == targetUserID {
+        return errors.New("CANNOT_KICK_SELF", "Admins cannot kick themselves. Please use the 'Leave Room' option.", 400)
+    }
+
+	// 2. Delete the target user's membership.
+	return s.roomRepo.DeleteMembership(ctx, roomID, targetUserID)
+}
+
+// LeaveRoom allows a user to remove themselves from a room.
+func (s *Service) LeaveRoom(ctx context.Context, userID, roomID string) error {
+	// 1. Check if user is the last admin.
+	membership, err := s.roomRepo.FindMembership(ctx, roomID, userID)
+	if err != nil {
+		return err
+	}
+
+	if membership.Role == AdminRole {
+		adminCount, err := s.roomRepo.CountAdmins(ctx, roomID)
+		if err != nil {
+			return err
+		}
+		if adminCount <= 1 {
+			return errors.New("LAST_ADMIN_LEAVE", "You cannot leave as the last admin. Promote another member first.", 403)
+		}
+	}
+
+	// 2. Delete the user's membership.
+	return s.roomRepo.DeleteMembership(ctx, roomID, userID)
+}

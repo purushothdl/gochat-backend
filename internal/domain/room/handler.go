@@ -41,7 +41,7 @@ func (h *Handler) CreateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if validationErrs := h.validator.Validate(req); validationErrs != nil {
-		response.ErrorJSON(w, http.StatusUnprocessableEntity, validationErrs) 
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, validationErrs)
 		return
 	}
 
@@ -69,13 +69,13 @@ func (h *Handler) InviteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if validationErrs := h.validator.Validate(req); validationErrs != nil {
-		response.ErrorJSON(w, http.StatusUnprocessableEntity, validationErrs) 
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, validationErrs)
 		return
 	}
 
 	err := h.service.InviteUser(r.Context(), inviterID, roomID, req.UserID)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, err) 
+		response.Error(w, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -131,7 +131,7 @@ func (h *Handler) ListMembers(w http.ResponseWriter, r *http.Request) {
 
 	members, err := h.service.ListMembers(r.Context(), requesterID, roomID)
 	if err != nil {
-		response.Error(w, 0, err) 
+		response.Error(w, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -153,9 +153,73 @@ func (h *Handler) JoinPublicRoom(w http.ResponseWriter, r *http.Request) {
 	roomID := chi.URLParam(r, "room_id")
 
 	if err := h.service.JoinPublicRoom(r.Context(), userID, roomID); err != nil {
-		response.Error(w, 0, err)
+		response.Error(w, http.StatusInternalServerError, err)
 		return
 	}
 
 	response.JSON(w, http.StatusOK, response.MessageResponse{Message: "Successfully joined room"})
+}
+
+// UpdateMemberRole handles PUT /api/v1/rooms/{room_id}/members/{user_id}
+func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := authMiddleware.GetUserID(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, errors.ErrUnauthorized)
+		return
+	}
+	roomID := chi.URLParam(r, "room_id")
+	targetUserID := chi.URLParam(r, "user_id")
+
+	var req UpdateMemberRoleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, err)
+		return
+	}
+	if validationErrs := h.validator.Validate(req); validationErrs != nil {
+		response.JSON(w, http.StatusBadRequest, validationErrs)
+		return
+	}
+
+	err := h.service.UpdateMemberRole(r.Context(), actorID, roomID, targetUserID, req.Role)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, response.MessageResponse{Message: "Member role updated successfully"})
+}
+
+// RemoveMember handles DELETE /api/v1/rooms/{room_id}/members/{user_id}
+func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := authMiddleware.GetUserID(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, errors.ErrUnauthorized)
+		return
+	}
+	roomID := chi.URLParam(r, "room_id")
+	targetUserID := chi.URLParam(r, "user_id")
+
+	if err := h.service.RemoveMember(r.Context(), actorID, roomID, targetUserID); err != nil {
+		response.Error(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// LeaveRoom handles DELETE /api/v1/rooms/{room_id}/members/me
+func (h *Handler) LeaveRoom(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authMiddleware.GetUserID(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, errors.ErrUnauthorized)
+		return
+	}
+	roomID := chi.URLParam(r, "room_id")
+
+	if err := h.service.LeaveRoom(r.Context(), userID, roomID); err != nil {
+		response.Error(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

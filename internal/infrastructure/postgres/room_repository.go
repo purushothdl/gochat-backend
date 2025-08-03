@@ -148,7 +148,7 @@ func (r *RoomRepository) ListMembers(ctx context.Context, roomID string) ([]*roo
 	for rows.Next() {
 		var m room.MemberDetail
 		var imageURL *string 
-		
+
 		if err := rows.Scan(&m.RoomID, &m.UserID, &m.Role, &m.Name, &imageURL); err != nil {
 			return nil, fmt.Errorf("failed to scan member detail: %w", err)
 		}
@@ -159,6 +159,44 @@ func (r *RoomRepository) ListMembers(ctx context.Context, roomID string) ([]*roo
 		members = append(members, &m)
 	}
 	return members, nil
+}
+
+// UpdateMembership updates the role of a member in a room.
+func (r *RoomRepository) UpdateMembership(ctx context.Context, membership *room.RoomMembership) error {
+	query := `
+        UPDATE room_memberships
+        SET role = $3, updated_at = NOW()
+        WHERE room_id = $1 AND user_id = $2
+    `
+	_, err := r.pool.Exec(ctx, query, membership.RoomID, membership.UserID, membership.Role)
+	if err != nil {
+		return fmt.Errorf("failed to update membership: %w", err)
+	}
+	return nil
+}
+
+// DeleteMembership removes a user from a room.
+func (r *RoomRepository) DeleteMembership(ctx context.Context, roomID, userID string) error {
+	query := `DELETE FROM room_memberships WHERE room_id = $1 AND user_id = $2`
+	cmdTag, err := r.pool.Exec(ctx, query, roomID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete membership: %w", err)
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return room.ErrNotMember // The user wasn't in the room to begin with.
+	}
+	return nil
+}
+
+// CountAdmins counts the number of administrators in a given room.
+func (r *RoomRepository) CountAdmins(ctx context.Context, roomID string) (int, error) {
+	query := `SELECT COUNT(*) FROM room_memberships WHERE room_id = $1 AND role = 'ADMIN'`
+	var count int
+	err := r.pool.QueryRow(ctx, query, roomID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count admins: %w", err)
+	}
+	return count, nil
 }
 
 // scanRoom is a helper to scan a room record from a pgx.Row scanner.
