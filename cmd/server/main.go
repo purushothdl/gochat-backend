@@ -47,7 +47,7 @@ func run(logger *slog.Logger) error {
 	}
 
 	// Set up the HTTP router with all routes and middleware.
-	router := httpTransport.NewRouter(c.AuthHandler, c.UserHandler, c.AuthMiddleware)
+	router := httpTransport.NewRouter(c.AuthHandler, c.UserHandler, c.HealthHandler, c.AuthMiddleware)
 	handler := router.SetupRoutes(cfg, logger)
 
 	// Create and run the server, which handles its own lifecycle.
