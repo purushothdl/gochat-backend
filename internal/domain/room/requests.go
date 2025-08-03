@@ -12,3 +12,7 @@ type InviteUserRequest struct {
 type UpdateMemberRoleRequest struct {
 	Role MemberRole `json:"role" validate:"required,oneof=ADMIN MEMBER"`
 }
+
+type UpdateRoomSettingsRequest struct {
+	IsBroadcastOnly *bool `json:"is_broadcast_only"`
+}

@@ -4,10 +4,11 @@ import "time"
 
 
 type RoomResponse struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Type      RoomType  `json:"type"`
-	CreatedAt time.Time `json:"created_at"`
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Type            RoomType  `json:"type"`
+	IsBroadcastOnly bool      `json:"is_broadcast_only"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 type MemberResponse struct {
@@ -19,10 +20,11 @@ type MemberResponse struct {
 
 func (r *Room) ToResponse() *RoomResponse {
 	return &RoomResponse{
-		ID:        r.ID,
-		Name:      r.Name,
-		Type:      r.Type,
-		CreatedAt: r.CreatedAt,
+		ID:              r.ID,
+		Name:            r.Name,
+		Type:            r.Type,
+		IsBroadcastOnly: r.IsBroadcastOnly,
+		CreatedAt:       r.CreatedAt,
 	}
 }
 

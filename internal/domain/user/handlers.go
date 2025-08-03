@@ -5,9 +5,11 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/purushothdl/gochat-backend/internal/shared/response"
 	"github.com/purushothdl/gochat-backend/internal/shared/validator"
 	authMiddleware "github.com/purushothdl/gochat-backend/internal/transport/http/middleware"
+	"github.com/purushothdl/gochat-backend/pkg/errors"
 )
 
 type Handler struct {
@@ -122,4 +124,64 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, response.MessageResponse{Message: "Password changed successfully"})
+}
+
+// BlockUser handles POST /api/v1/users/me/blocks
+func (h *Handler) BlockUser(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := authMiddleware.GetUserID(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, errors.ErrUnauthorized)
+		return
+	}
+
+	var req BlockUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, err)
+		return
+	}
+	if validationErrs := h.validator.Validate(req); validationErrs != nil {
+		response.JSON(w, http.StatusBadRequest, validationErrs)
+		return
+	}
+
+	if err := h.service.BlockUser(r.Context(), actorID, req.UserID); err != nil {
+		response.Error(w, 0, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// UnblockUser handles DELETE /api/v1/users/me/blocks/{user_id}
+func (h *Handler) UnblockUser(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := authMiddleware.GetUserID(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, errors.ErrUnauthorized)
+		return
+	}
+	targetUserID := chi.URLParam(r, "user_id")
+
+	if err := h.service.UnblockUser(r.Context(), actorID, targetUserID); err != nil {
+		response.Error(w, 0, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ListBlockedUsers handles GET /api/v1/users/me/blocks
+func (h *Handler) ListBlockedUsers(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := authMiddleware.GetUserID(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, errors.ErrUnauthorized)
+		return
+	}
+
+	blockedUsers, err := h.service.ListBlockedUsers(r.Context(), actorID)
+	if err != nil {
+		response.Error(w, 0, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, blockedUsers)
 }

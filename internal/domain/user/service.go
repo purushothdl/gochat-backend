@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/purushothdl/gochat-backend/internal/config"
+	"github.com/purushothdl/gochat-backend/internal/shared/types"
 	"github.com/purushothdl/gochat-backend/pkg/auth"
 	pointer "github.com/purushothdl/gochat-backend/pkg/utils/pointer"
 )
@@ -136,4 +137,32 @@ func (s *Service) DeleteAccount(ctx context.Context, userID string) error {
     }
     
     return nil
+}
+
+// BlockUser creates a block relationship from the actor to the target user.
+func (s *Service) BlockUser(ctx context.Context, actorID, targetUserID string) error {
+	if actorID == targetUserID {
+		return ErrCannotBlockSelf
+	}
+
+	// Ensure the user being blocked actually exists.
+	exists, err := s.repo.ExistsByID(ctx, targetUserID) 
+	if err != nil {
+		return fmt.Errorf("failed to check user existence: %w", err)
+	}
+	if !exists {
+		return ErrUserNotFound
+	}
+
+	return s.repo.BlockUser(ctx, actorID, targetUserID)
+}
+
+// UnblockUser removes a block relationship.
+func (s *Service) UnblockUser(ctx context.Context, actorID, targetUserID string) error {
+	return s.repo.UnblockUser(ctx, actorID, targetUserID)
+}
+
+// ListBlockedUsers returns a list of basic user profiles the actor has blocked.
+func (s *Service) ListBlockedUsers(ctx context.Context, actorID string) ([]*types.BasicUser, error) {
+	return s.repo.ListBlockedUsers(ctx, actorID)
 }

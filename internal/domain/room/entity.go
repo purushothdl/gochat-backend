@@ -23,12 +23,13 @@ const (
 
 // Room represents the core room entity.
 type Room struct {
-	ID        string
-	Name      string
-	Type      RoomType
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt *time.Time
+	ID              string
+	Name            string
+	Type            RoomType
+	IsBroadcastOnly bool
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	DeletedAt       *time.Time
 }
 
 // RoomMembership links a user to a room with a specific role.

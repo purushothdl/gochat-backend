@@ -7,6 +7,7 @@ type Repository interface {
 	CreateRoom(ctx context.Context, room *Room) error
 	FindRoomByID(ctx context.Context, roomID string) (*Room, error)
 	ListPublicRooms(ctx context.Context) ([]*Room, error)
+	UpdateRoom(ctx context.Context, room *Room) error
 
 	CreateMembership(ctx context.Context, membership *RoomMembership) error
 	FindMembership(ctx context.Context, roomID, userID string) (*RoomMembership, error)

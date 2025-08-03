@@ -223,3 +223,29 @@ func (h *Handler) LeaveRoom(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// UpdateRoomSettings handles PUT /api/v1/rooms/{room_id}/settings
+func (h *Handler) UpdateRoomSettings(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := authMiddleware.GetUserID(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, errors.ErrUnauthorized)
+		return
+	}
+	roomID := chi.URLParam(r, "room_id")
+
+	var req UpdateRoomSettingsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, err)
+		return
+	}
+
+	// No validation needed for this specific request, but the hook is here for future fields.
+
+	updatedRoom, err := h.service.UpdateRoomSettings(r.Context(), actorID, roomID, req)
+	if err != nil {
+		response.Error(w, 0, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, updatedRoom.ToResponse())
+}

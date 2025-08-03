@@ -69,6 +69,11 @@ func (rt *Router) SetupRoutes(cfg *config.Config, logger *slog.Logger) *chi.Mux 
 			r.Put("/profile", rt.userHandler.UpdateProfile)   // Update user profile
 			r.Put("/settings", rt.userHandler.UpdateSettings) // Update user settings
 			r.Put("/password", rt.userHandler.ChangePassword) // Change user password
+
+			// User blocking features
+			r.Post("/block", rt.userHandler.BlockUser)               // Block a user
+			r.Delete("/block/{user_id}", rt.userHandler.UnblockUser) // Unblock a user
+			r.Get("/blocked", rt.userHandler.ListBlockedUsers)       // List blocked users
 		})
 
 		r.Route("/rooms", func(r chi.Router) {

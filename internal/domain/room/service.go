@@ -217,3 +217,32 @@ func (s *Service) LeaveRoom(ctx context.Context, userID, roomID string) error {
 	// 2. Delete the user's membership.
 	return s.roomRepo.DeleteMembership(ctx, roomID, userID)
 }
+
+func (s *Service) UpdateRoomSettings(ctx context.Context, actorID, roomID string, req UpdateRoomSettingsRequest) (*Room, error) {
+	// 1. Authorize: Ensure the actor is an admin.
+	actorMembership, err := s.roomRepo.FindMembership(ctx, roomID, actorID)
+	if err != nil {
+		return nil, err
+	}
+	if actorMembership.Role != AdminRole {
+		return nil, ErrNotAdmin
+	}
+
+	// 2. Fetch the current state of the room.
+	targetRoom, err := s.roomRepo.FindRoomByID(ctx, roomID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Apply changes if they were provided in the request.
+	if req.IsBroadcastOnly != nil {
+		targetRoom.IsBroadcastOnly = *req.IsBroadcastOnly
+	}
+
+	// 4. Persist the changes.
+	if err := s.roomRepo.UpdateRoom(ctx, targetRoom); err != nil {
+		return nil, err
+	}
+
+	return targetRoom, nil
+}

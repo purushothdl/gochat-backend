@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/purushothdl/gochat-backend/internal/domain/user"
 	"github.com/purushothdl/gochat-backend/internal/shared/types"
@@ -184,9 +185,85 @@ func (r *UserRepository) UpdatePassword(ctx context.Context, userID string, newP
 	return nil
 }
 
+// BlockUser creates a new record in the user_blocks table.
+func (r *UserRepository) BlockUser(ctx context.Context, blockerID, blockedID string) error {
+	query := `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`
+	_, err := r.pool.Exec(ctx, query, blockerID, blockedID)
+	if err != nil {
+		// pgerr.Code "23505" is the unique_violation for the primary key.
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
+			return user.ErrAlreadyBlocked
+		}
+		return fmt.Errorf("failed to block user: %w", err)
+	}
+	return nil
+}
+
+// UnblockUser removes a record from the user_blocks table.
+func (r *UserRepository) UnblockUser(ctx context.Context, blockerID, blockedID string) error {
+	query := `DELETE FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2`
+	cmdTag, err := r.pool.Exec(ctx, query, blockerID, blockedID)
+	if err != nil {
+		return fmt.Errorf("failed to unblock user: %w", err)
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return user.ErrNotBlocked
+	}
+	return nil
+}
+
+// ListBlockedUsers retrieves all users that a specific user has blocked.
+func (r *UserRepository) ListBlockedUsers(ctx context.Context, blockerID string) ([]*types.BasicUser, error) {
+	query := `
+        SELECT u.id, u.name, u.image_url
+        FROM users u
+        JOIN user_blocks ub ON u.id = ub.blocked_id
+        WHERE ub.blocker_id = $1 AND u.deleted_at IS NULL
+    `
+	rows, err := r.pool.Query(ctx, query, blockerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list blocked users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*types.BasicUser
+	for rows.Next() {
+		// Use the new, dedicated helper for BasicUser.
+		user, err := scanBasicUserFromRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan blocked user row: %w", err)
+		}
+		users = append(users, user)
+	}
+
+	return users, nil
+}
+
+// IsBlocked checks if a communication block exists between two users, in either direction.
+func (r *UserRepository) IsBlocked(ctx context.Context, userID1, userID2 string) (bool, error) {
+	query := `
+        SELECT EXISTS(
+            SELECT 1 FROM user_blocks 
+            WHERE (blocker_id = $1 AND blocked_id = $2) 
+               OR (blocker_id = $2 AND blocked_id = $1)
+        )
+    `
+	var isBlocked bool
+	err := r.pool.QueryRow(ctx, query, userID1, userID2).Scan(&isBlocked)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if blocked: %w", err)
+	}
+	return isBlocked, nil
+}
+
 // ============================================================================
 // PRIVATE HELPER METHODS
 // ============================================================================
+
+// This allows us to use one scanning helper for both single and multi-row queries.
+type rowScanner interface {
+	Scan(dest ...any) error
+}
 
 func (r *UserRepository) scanDomainUser(ctx context.Context, query string, args ...any) (*user.User, error) {
     var u user.User
@@ -255,4 +332,21 @@ func (r *UserRepository) scanSharedUser(ctx context.Context, query string, args 
     }
 
     return &u, nil
+}
+
+// scanBasicUserFromRow scans the essential public fields of a user into a types.BasicUser.
+func scanBasicUserFromRow(row rowScanner) (*types.BasicUser, error) {
+	var u types.BasicUser
+	var imageURL sql.NullString
+
+	err := row.Scan(&u.ID, &u.Name, &imageURL)
+	if err != nil {
+		return nil, err
+	}
+
+	if imageURL.Valid {
+		u.ImageURL = imageURL.String
+	}
+
+	return &u, nil
 }

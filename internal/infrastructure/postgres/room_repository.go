@@ -36,6 +36,23 @@ func (r *RoomRepository) CreateRoom(ctx context.Context, newRoom *room.Room) err
 	return nil
 }
 
+// UpdateRoom updates a room's mutable properties.
+func (r *RoomRepository) UpdateRoom(ctx context.Context, rm *room.Room) error {
+	query := `
+        UPDATE rooms
+        SET name = $2, is_broadcast_only = $3, updated_at = NOW()
+        WHERE id = $1 AND deleted_at IS NULL
+    `
+	cmdTag, err := r.pool.Exec(ctx, query, rm.ID, rm.Name, rm.IsBroadcastOnly)
+	if err != nil {
+		return fmt.Errorf("failed to update room: %w", err)
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return room.ErrRoomNotFound
+	}
+	return nil
+}
+
 // CreateMembership inserts a new room membership record.
 func (r *RoomRepository) CreateMembership(ctx context.Context, membership *room.RoomMembership) error {
 	query := `
