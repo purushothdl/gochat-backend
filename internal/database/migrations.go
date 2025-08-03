@@ -53,7 +53,6 @@ func (m *MigrationRunner) CreateMigration(name string) error {
 
     upContent := fmt.Sprintf(`-- Migration: %s
 -- Created at: %s
--- Description: Add your migration description here
 
 -- Add your UP migration SQL here
 -- Example:
@@ -68,13 +67,12 @@ func (m *MigrationRunner) CreateMigration(name string) error {
 
     downContent := fmt.Sprintf(`-- Rollback migration: %s
 -- Created at: %s
--- Description: Rollback changes from %s migration
 
 -- Add your DOWN migration SQL here
 -- Example:
 -- DROP TABLE IF EXISTS users;
 
-`, name, time.Now().Format(time.RFC3339), name)
+`, name, time.Now().Format(time.RFC3339))
 
     // Write the files
     if err := os.WriteFile(upFile, []byte(upContent), 0644); err != nil {

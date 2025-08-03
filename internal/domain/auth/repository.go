@@ -20,11 +20,6 @@ type Repository interface {
     CountUserTokens(ctx context.Context, userID string) (int, error)
 }
 
-type PasswordResetToken struct {
-	UserID    string
-	ExpiresAt time.Time
-}
-
 type PasswordResetRepository interface {
 	Store(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error
 	FindByTokenHash(ctx context.Context, tokenHash string) (*PasswordResetToken, error)

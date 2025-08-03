@@ -11,13 +11,13 @@ import (
     "github.com/purushothdl/gochat-backend/pkg/errors"
 )
 
-type contextKey struct {
+type authContextKey struct {
     name string
 }
 
 var (
-    userIDKey   = &contextKey{"userID"}
-    userEmailKey = &contextKey{"userEmail"}
+    userIDKey   = &authContextKey{"userID"}
+    userEmailKey = &authContextKey{"userEmail"}
 )
 
 type AuthMiddleware struct {

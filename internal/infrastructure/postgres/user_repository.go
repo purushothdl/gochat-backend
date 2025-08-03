@@ -139,6 +139,14 @@ func (r *UserRepository) Create(ctx context.Context, userData *types.CreateUserD
     return &u, nil
 }
 
+func (r *UserRepository) ExistsByID(ctx context.Context, id string) (bool, error) {
+    query := `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND deleted_at IS NULL)`
+    
+    var exists bool
+    err := r.pool.QueryRow(ctx, query, id).Scan(&exists)
+    return exists, err
+}
+
 func (r *UserRepository) ExistsByEmail(ctx context.Context, email string) (bool, error) {
     query := `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND deleted_at IS NULL)`
     

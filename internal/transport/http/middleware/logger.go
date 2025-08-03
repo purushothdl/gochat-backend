@@ -44,7 +44,7 @@ func RequestLogger(next http.Handler) http.Handler {
 				"status", ww.Status(),
 				"method", r.Method,
 				"path", r.URL.Path,
-				"duration", time.Since(start),
+				"duration_ms", time.Since(start).Milliseconds(),
 				"bytes_written", ww.BytesWritten(),
 				"remote_addr", r.RemoteAddr,
 			)

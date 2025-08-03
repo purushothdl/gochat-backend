@@ -6,19 +6,22 @@ import (
 	"net/http"
 
 	"github.com/purushothdl/gochat-backend/internal/shared/response"
+	"github.com/purushothdl/gochat-backend/internal/shared/validator"
 	authMiddleware "github.com/purushothdl/gochat-backend/internal/transport/http/middleware"
 	"github.com/purushothdl/gochat-backend/pkg/utils/httputil"
 )
 
 type Handler struct {
-	service *Service
-	logger  *slog.Logger
+	service   *Service
+	logger    *slog.Logger
+	validator *validator.Validator
 }
 
-func NewHandler(service *Service, logger *slog.Logger) *Handler {
+func NewHandler(service *Service, logger *slog.Logger, validator *validator.Validator) *Handler {
 	return &Handler{
-		service: service,
-		logger:  logger,
+		service:   service,
+		logger:    logger,
+		validator: validator,
 	}
 }
 
@@ -26,6 +29,12 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, err)
+		return
+	}
+
+	// Validate the request body
+	if errs := h.validator.Validate(req); errs != nil {
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, errs) 
 		return
 	}
 
@@ -47,6 +56,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, err)
+		return
+	}
+
+	if errs := h.validator.Validate(req); errs != nil {
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, errs) 
 		return
 	}
 
@@ -134,6 +148,11 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if errs := h.validator.Validate(req); errs != nil {
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, errs) 
+		return
+	}
+
 	// The service handles all logic. We deliberately don't return an error
 	// to prevent user enumeration attacks.
 	if err := h.service.ForgotPassword(r.Context(), req.Email); err != nil {
@@ -153,6 +172,11 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if errs := h.validator.Validate(req); errs != nil {
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, errs) 
+		return
+	}
+	
 	if err := h.service.ResetPassword(r.Context(), req.Token, req.Password); err != nil {
 		response.Error(w, http.StatusBadRequest, err) 
 		return

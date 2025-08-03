@@ -6,18 +6,21 @@ import (
 	"net/http"
 
 	"github.com/purushothdl/gochat-backend/internal/shared/response"
-    authMiddleware "github.com/purushothdl/gochat-backend/internal/transport/http/middleware" 
+	"github.com/purushothdl/gochat-backend/internal/shared/validator"
+	authMiddleware "github.com/purushothdl/gochat-backend/internal/transport/http/middleware"
 )
 
 type Handler struct {
-	service *Service
-	logger  *slog.Logger 
+	service   *Service
+	logger    *slog.Logger
+	validator *validator.Validator
 }
 
-func NewHandler(service *Service, logger *slog.Logger) *Handler {
+func NewHandler(service *Service, logger *slog.Logger, validator *validator.Validator) *Handler {
 	return &Handler{
-		service: service,
-		logger:  logger, 
+		service:   service,
+		logger:    logger,
+		validator: validator,
 	}
 }
 
@@ -51,6 +54,11 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    if errs := h.validator.Validate(req); errs != nil {
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, errs) 
+		return
+	}
+
     result, err := h.service.UpdateProfile(r.Context(), userID, req)
     if err != nil {
         response.Error(w, http.StatusBadRequest, err)
@@ -73,6 +81,11 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    if errs := h.validator.Validate(req); errs != nil {
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, errs) 
+		return
+	}
+
     result, err := h.service.UpdateSettings(r.Context(), userID, req)
     if err != nil {
         response.Error(w, http.StatusBadRequest, err)
@@ -94,6 +107,11 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.logger.Warn("failed to decode change password request", "error", err, "user_id", userID)
 		response.Error(w, http.StatusBadRequest, err)
+		return
+	}
+    
+	if errs := h.validator.Validate(req); errs != nil {
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, errs) 
 		return
 	}
 
