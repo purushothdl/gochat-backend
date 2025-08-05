@@ -7,7 +7,8 @@ import (
 	"github.com/purushothdl/gochat-backend/internal/config"
 	"github.com/purushothdl/gochat-backend/internal/domain/auth"
 	"github.com/purushothdl/gochat-backend/internal/domain/health"
-	"github.com/purushothdl/gochat-backend/internal/domain/room" 
+	"github.com/purushothdl/gochat-backend/internal/domain/message"
+	"github.com/purushothdl/gochat-backend/internal/domain/room"
 	"github.com/purushothdl/gochat-backend/internal/domain/user"
 	"github.com/purushothdl/gochat-backend/internal/infrastructure/email"
 	"github.com/purushothdl/gochat-backend/internal/infrastructure/postgres"
@@ -25,7 +26,9 @@ type Container struct {
 	UserRepo          *postgres.UserRepository
 	AuthRepo          *postgres.AuthRepository
 	PasswordResetRepo *postgres.PasswordResetRepository
-	RoomRepo          *postgres.RoomRepository 
+	RoomRepo          *postgres.RoomRepository
+	MessageRepo       *postgres.MessageRepository
+
 	// External Services
 	EmailService *email.ResendService
 
@@ -33,13 +36,15 @@ type Container struct {
 	AuthService   *auth.Service
 	UserService   *user.Service
 	HealthService *health.Service
-	RoomService   *room.Service 
+	RoomService   *room.Service
+	MessageService *message.Service
 
 	// Handlers
 	AuthHandler   *auth.Handler
 	UserHandler   *user.Handler
 	HealthHandler *health.Handler
-	RoomHandler   *room.Handler 
+	RoomHandler   *room.Handler
+	MessageHandler *message.Handler
 
 	// Middleware
 	AuthMiddleware *middleware.AuthMiddleware
@@ -59,7 +64,8 @@ func (c *Container) Build() error {
 	c.UserRepo = postgres.NewUserRepository(c.DB)
 	c.AuthRepo = postgres.NewAuthRepository(c.DB)
 	c.PasswordResetRepo = postgres.NewPasswordResetRepository(c.DB)
-	c.RoomRepo = postgres.NewRoomRepository(c.DB) 
+	c.RoomRepo = postgres.NewRoomRepository(c.DB)
+	c.MessageRepo = postgres.NewMessageRepository(c.DB)
 
 	// Build external service clients
 	c.EmailService = email.NewResendService(&c.Config.Resend)
@@ -75,16 +81,24 @@ func (c *Container) Build() error {
 	)
 	c.UserService = user.NewService(c.UserRepo, c.Config, c.Logger)
 	c.HealthService = health.NewService(c.DB, c.Logger)
-	c.RoomService = room.NewService(c.RoomRepo, c.UserRepo, c.Config, c.Logger) 
+	c.RoomService = room.NewService(c.RoomRepo, c.UserRepo, c.Config, c.Logger)
+	c.MessageService = message.NewService(
+		c.MessageRepo,
+		c.RoomRepo,
+		c.UserRepo,
+		c.Config,
+		c.Logger,
+	)
 
 	// Build handlers
 	c.AuthHandler = auth.NewHandler(c.AuthService, c.Logger, c.Validator)
 	c.UserHandler = user.NewHandler(c.UserService, c.Logger, c.Validator)
 	c.HealthHandler = health.NewHandler(c.HealthService, c.Logger)
-	c.RoomHandler = room.NewHandler(c.RoomService, c.Logger, c.Validator) 
+	c.RoomHandler = room.NewHandler(c.RoomService, c.Logger, c.Validator)
+	c.MessageHandler = message.NewHandler(c.MessageService, c.Logger, c.Validator)
 
 	// Build middleware
-	c.AuthMiddleware = middleware.NewAuthMiddleware(c.Config)
+	c.AuthMiddleware = middleware.NewAuthMiddleware(c.Config, c.UserRepo)
 
 	return nil
 }

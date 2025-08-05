@@ -22,6 +22,7 @@ var (
     ErrForbidden         = &AppError{"FORBIDDEN", "Forbidden access", http.StatusForbidden}
     ErrBadRequest        = &AppError{"BAD_REQUEST", "Bad request", http.StatusBadRequest}
     ErrInternalServer    = &AppError{"INTERNAL_SERVER", "Internal server error", http.StatusInternalServerError}
+    ErrExternalServer    = &AppError{"EXTERNAL_SERVER", "External server error", http.StatusBadGateway}
     ErrValidationFailed  = &AppError{"VALIDATION_FAILED", "Validation failed", http.StatusBadRequest}
 )
 

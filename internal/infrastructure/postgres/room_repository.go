@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/purushothdl/gochat-backend/internal/domain/room"
+	"github.com/purushothdl/gochat-backend/internal/shared/types"
 )
 
 type RoomRepository struct {
@@ -215,6 +216,48 @@ func (r *RoomRepository) CountAdmins(ctx context.Context, roomID string) (int, e
 	}
 	return count, nil
 }
+
+
+// ============================================================================
+// Provider Methods (for other domains)
+// ============================================================================
+
+// GetRoomInfo provides minimal, shared room data for other services.
+func (r *RoomRepository) GetRoomInfo(ctx context.Context, roomID string) (*types.RoomInfo, error) {
+	query := `SELECT id, type, is_broadcast_only FROM rooms WHERE id = $1 AND deleted_at IS NULL`
+	var info types.RoomInfo
+	err := r.pool.QueryRow(ctx, query, roomID).Scan(
+		&info.ID,
+		&info.Type,
+		&info.IsBroadcastOnly,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, room.ErrRoomNotFound 
+		}
+		return nil, fmt.Errorf("failed to get room info: %w", err)
+	}
+	return &info, nil
+}
+
+// GetMembershipInfo provides minimal, shared membership data for other services.
+func (r *RoomRepository) GetMembershipInfo(ctx context.Context, roomID, userID string) (*types.MembershipInfo, error) {
+	query := `SELECT room_id, user_id, role FROM room_memberships WHERE room_id = $1 AND user_id = $2`
+	var info types.MembershipInfo
+	err := r.pool.QueryRow(ctx, query, roomID, userID).Scan(
+		&info.RoomID,
+		&info.UserID,
+		&info.Role,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, room.ErrNotMember 
+		}
+		return nil, fmt.Errorf("failed to get membership info: %w", err)
+	}
+	return &info, nil
+}
+
 
 // scanRoom is a helper to scan a room record from a pgx.Row scanner.
 func scanRoom(row pgx.Row) (*room.Room, error) {

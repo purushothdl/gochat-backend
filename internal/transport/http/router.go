@@ -9,26 +9,29 @@ import (
 	"github.com/purushothdl/gochat-backend/internal/config"
 	"github.com/purushothdl/gochat-backend/internal/domain/auth"
 	"github.com/purushothdl/gochat-backend/internal/domain/health"
+	"github.com/purushothdl/gochat-backend/internal/domain/message"
 	"github.com/purushothdl/gochat-backend/internal/domain/room"
 	"github.com/purushothdl/gochat-backend/internal/domain/user"
 	app_middleware "github.com/purushothdl/gochat-backend/internal/transport/http/middleware"
 )
 
 type Router struct {
-	authHandler   *auth.Handler
-	userHandler   *user.Handler
-	healthHandler *health.Handler
-	roomHandler   *room.Handler
-	authMw        *app_middleware.AuthMiddleware
+	authHandler    *auth.Handler
+	userHandler    *user.Handler
+	healthHandler  *health.Handler
+	roomHandler    *room.Handler
+	messageHandler *message.Handler
+	authMw         *app_middleware.AuthMiddleware
 }
 
-func NewRouter(authHandler *auth.Handler, userHandler *user.Handler, healthHandler *health.Handler, roomHandler *room.Handler, authMw *app_middleware.AuthMiddleware) *Router {
+func NewRouter(authHandler *auth.Handler, userHandler *user.Handler, healthHandler *health.Handler, roomHandler *room.Handler, messageHandler *message.Handler, authMw *app_middleware.AuthMiddleware) *Router {
 	return &Router{
-		authHandler:   authHandler,
-		userHandler:   userHandler,
-		healthHandler: healthHandler,
-		roomHandler:   roomHandler,
-		authMw:        authMw,
+		authHandler:    authHandler,
+		userHandler:    userHandler,
+		healthHandler:  healthHandler,
+		roomHandler:    roomHandler,
+		messageHandler: messageHandler,
+		authMw:         authMw,
 	}
 }
 
@@ -65,6 +68,7 @@ func (rt *Router) SetupRoutes(cfg *config.Config, logger *slog.Logger) *chi.Mux 
 
 		r.Route("/user", func(r chi.Router) {
 			r.Use(rt.authMw.RequireAuth)
+			
 			r.Get("/profile", rt.userHandler.GetProfile)      // Get user profile
 			r.Put("/profile", rt.userHandler.UpdateProfile)   // Update user profile
 			r.Put("/settings", rt.userHandler.UpdateSettings) // Update user settings
@@ -75,7 +79,6 @@ func (rt *Router) SetupRoutes(cfg *config.Config, logger *slog.Logger) *chi.Mux 
 			r.Delete("/block/{user_id}", rt.userHandler.UnblockUser) // Unblock a user
 			r.Get("/blocked", rt.userHandler.ListBlockedUsers)       // List blocked users
 		})
-
 		r.Route("/rooms", func(r chi.Router) {
 			r.Use(rt.authMw.RequireAuth)
 
@@ -93,6 +96,30 @@ func (rt *Router) SetupRoutes(cfg *config.Config, logger *slog.Logger) *chi.Mux 
 			r.Put("/{room_id}/members/{user_id}", rt.roomHandler.UpdateMemberRole) // Update a member's role
 			r.Delete("/{room_id}/members/{user_id}", rt.roomHandler.RemoveMember)  // Remove a member from a room
 			r.Delete("/{room_id}/members/me", rt.roomHandler.LeaveRoom)            // Authenticated user leaves a room
+
+			// Room settings
+			r.Put("/{room_id}/settings", rt.roomHandler.UpdateRoomSettings) // Update room settings
+
+			// Message operations within a room
+			r.Post("/{room_id}/messages", rt.messageHandler.SendMessage)     // Send a message to a specific room
+			r.Get("/{room_id}/messages", rt.messageHandler.GetMessages)      // Get message history for a room
+			r.Post("/{room_id}/read_marker", rt.messageHandler.MarkRoomRead) // Mark a room as read for the current user
+		})
+
+		r.Route("/messages", func(r chi.Router) {
+			r.Use(rt.authMw.RequireAuth)
+
+			// Individual message operations
+			r.Put("/{message_id}", rt.messageHandler.EditMessage)                 // Edit a specific message
+			r.Delete("/{message_id}", rt.messageHandler.DeleteMessage)            // Delete a specific message
+			r.Get("/{message_id}/receipts", rt.messageHandler.GetMessageReceipts) // Get read receipts for a specific message
+		})
+
+		r.Route("/receipts", func(r chi.Router) {
+			r.Use(rt.authMw.RequireAuth)
+
+			// Message read receipt operations
+			r.Post("/bulk_seen", rt.messageHandler.MarkMessagesSeen) // Mark multiple messages as seen
 		})
 	})
 

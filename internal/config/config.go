@@ -72,6 +72,7 @@ func Load() (*Config, error) {
         App: AppConfig{
 			ClientURL: getEnv("CLIENT_URL", "http://localhost:3000"),
 		},
+
 		Server: ServerConfig{
 			Port:            getEnv("PORT", "8080"),
 			Env:             getEnv("ENV", "development"),
@@ -80,6 +81,7 @@ func Load() (*Config, error) {
 			IdleTimeout:     parseDuration("SERVER_IDLE_TIMEOUT", "120s"),
 			ShutdownTimeout: parseDuration("SERVER_SHUTDOWN_TIMEOUT", "30s"),
         },
+
         Database: DatabaseConfig{
             URL:             getEnv("DATABASE_URL", ""),
             Host:            getEnv("DB_HOST", "localhost"),
@@ -92,25 +94,30 @@ func Load() (*Config, error) {
             ConnMaxLifetime: parseDuration("DB_CONN_MAX_LIFETIME", "5m"),
             ConnMaxIdleTime: parseDuration("DB_CONN_MAX_IDLE_TIME", "5m"),
         },
+
         JWT: JWTConfig{
             Secret:             getEnv("JWT_SECRET", "your-secret-key"),
             AccessTokenExpiry:  parseDuration("JWT_EXPIRY", "15m"),
             RefreshTokenExpiry: parseDuration("REFRESH_TOKEN_EXPIRY", "30d"),
         },
+
         Security: SecurityConfig{
             BcryptCost: parseInt("BCRYPT_COST", 12),
         },
+
         CORS: CORSConfig{
 			AllowedOrigins:   strings.Split(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173"), ","),
 			AllowedMethods:   strings.Split(getEnv("CORS_ALLOWED_METHODS", "GET,POST,PUT,DELETE,OPTIONS"), ","),
 			AllowedHeaders:   strings.Split(getEnv("CORS_ALLOWED_HEADERS", "Accept,Authorization,Content-Type"), ","),
 			AllowCredentials: getEnvAsBool("CORS_ALLOW_CREDENTIALS", true),
 		},
+
         Resend: ResendConfig{
 			APIKey:    getEnv("RESEND_API_KEY", ""),
 			FromEmail: getEnv("RESEND_FROM_EMAIL", "onboarding@resend.dev"),
 			FromName:  getEnv("RESEND_FROM_NAME", "GoChat"),
 		},
+        
     }, nil
     
 }
