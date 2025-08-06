@@ -161,32 +161,6 @@ func (h *Handler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handler) MarkRoomRead(w http.ResponseWriter, r *http.Request) {
-	userID, ok := authMiddleware.GetUserID(r.Context())
-	if !ok {
-		response.Error(w, http.StatusUnauthorized, errors.ErrUnauthorized)
-		return
-	}
-	roomID := chi.URLParam(r, "room_id")
-
-	var req ReadMarkerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, err)
-		return
-	}
-	if errs := h.validator.Validate(req); errs != nil {
-		response.JSON(w, http.StatusBadRequest, errs)
-		return
-	}
-
-	if err := h.service.MarkRoomRead(r.Context(), userID, roomID, req.LastReadTimestamp); err != nil {
-		response.Error(w, 0, err)
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func (h *Handler) MarkMessagesSeen(w http.ResponseWriter, r *http.Request) {
 	userID, ok := authMiddleware.GetUserID(r.Context())
 	if !ok {

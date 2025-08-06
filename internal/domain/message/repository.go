@@ -27,6 +27,7 @@ type Repository interface {
 	SoftDeleteMessage(ctx context.Context, messageID string) error
 	DeleteMessageForUser(ctx context.Context, messageID, userID string) error
 
+	GetLatestTimestampForMessages(ctx context.Context, messageIDs []string) (*time.Time, error)
 	UpdateRoomReadMarker(ctx context.Context, roomID, userID string, timestamp time.Time) error
 	CreateBulkReadReceipts(ctx context.Context, roomID, userID string, messageIDs []string) error
 	GetMessageReceipts(ctx context.Context, messageID string) ([]*types.BasicUser, error)

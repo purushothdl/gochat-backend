@@ -98,6 +98,16 @@ func (r *MessageRepository) ListMessagesByRoom(ctx context.Context, roomID, user
 	return messages, nil
 }
 
+func (r *MessageRepository) GetLatestTimestampForMessages(ctx context.Context, messageIDs []string) (*time.Time, error) {
+	query := `SELECT MAX(created_at) FROM messages WHERE id = ANY($1)`
+	var latest time.Time
+	err := r.pool.QueryRow(ctx, query, messageIDs).Scan(&latest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get latest message timestamp: %w", err)
+	}
+	return &latest, nil
+}
+
 func (r *MessageRepository) UpdateMessage(ctx context.Context, messageID, content string) error {
 	query := `UPDATE messages SET content = $1, updated_at = NOW() WHERE id = $2`
 	_, err := r.pool.Exec(ctx, query, content, messageID)

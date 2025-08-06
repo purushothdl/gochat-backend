@@ -103,7 +103,6 @@ func (rt *Router) SetupRoutes(cfg *config.Config, logger *slog.Logger) *chi.Mux 
 			// Message operations within a room
 			r.Post("/{room_id}/messages", rt.messageHandler.SendMessage)     // Send a message to a specific room
 			r.Get("/{room_id}/messages", rt.messageHandler.GetMessages)      // Get message history for a room
-			r.Post("/{room_id}/read_marker", rt.messageHandler.MarkRoomRead) // Mark a room as read for the current user
 		})
 
 		r.Route("/messages", func(r chi.Router) {

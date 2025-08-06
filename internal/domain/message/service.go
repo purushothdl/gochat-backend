@@ -109,14 +109,28 @@ func (s *Service) DeleteMessage(ctx context.Context, actorID, messageID, scope s
 	return s.msgRepo.SoftDeleteMessage(ctx, messageID)
 }
 
-func (s *Service) MarkRoomRead(ctx context.Context, userID, roomID string, timestamp time.Time) error {
-	// TODO: Publish real-time event via Redis to update unread count on other devices
-	return s.msgRepo.UpdateRoomReadMarker(ctx, roomID, userID, timestamp)
-}
-
 func (s *Service) MarkMessagesAsSeen(ctx context.Context, userID, roomID string, messageIDs []string) error {
-	// TODO: Publish real-time event via Redis to notify sender of 'seen' status
-	return s.msgRepo.CreateBulkReadReceipts(ctx, roomID, userID, messageIDs)
+	// Step 1: Persist the individual receipts for the "blue tick" system.
+	err := s.msgRepo.CreateBulkReadReceipts(ctx, roomID, userID, messageIDs)
+	if err != nil {
+		return err 
+	}
+	// TODO: Publish real-time event to notify sender of 'seen' status.
+
+	// Step 2: Determine if the user's unread count should be updated.
+	latestTimestamp, err := s.msgRepo.GetLatestTimestampForMessages(ctx, messageIDs)
+	if err != nil {
+		s.logger.Error("failed to get latest timestamp for bulk seen", "error", err)
+		return nil
+	}
+
+	// Step 3: Conditionally update the user's high-water mark.
+	if err := s.msgRepo.UpdateRoomReadMarker(ctx, roomID, userID, *latestTimestamp); err != nil {
+		s.logger.Error("failed to update room read marker during bulk seen", "error", err)
+	}
+    // TODO: Publish real-time event to update unread count on other devices.
+
+	return nil
 }
 
 func (s *Service) GetMessageReceipts(ctx context.Context, actorID, messageID string) ([]*types.BasicUser, error) {
