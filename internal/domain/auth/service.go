@@ -244,7 +244,9 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 	return nil
 }
 
-func (s *Service) Logout(ctx context.Context, refreshTokenString string) error {
+func (s *Service) Logout(ctx context.Context, w http.ResponseWriter, refreshTokenString string) error {
+    s.clearAuthCookies(w)
+
     if refreshTokenString == "" {
         return nil // Already logged out
     }
@@ -298,7 +300,7 @@ func (s *Service) generateAuthResponse(ctx context.Context, user *types.User, w 
     }
     
     // Set HTTP-only cookie with refresh token
-    s.setRefreshTokenCookie(w, refreshTokenString)
+    s.setAuthCookies(w, accessToken, refreshTokenString)
     
     return &AuthenticationResponse{
         AccessToken: accessToken,
@@ -314,19 +316,50 @@ func (s *Service) generateAuthResponse(ctx context.Context, user *types.User, w 
     }, nil
 }
 
-// Set secure HTTP-only cookie
-func (s *Service) setRefreshTokenCookie(w http.ResponseWriter, refreshToken string) {
-    cookie := &http.Cookie{
-        Name:     "refresh_token",
-        Value:    refreshToken,
-        Path:     "/",
-        MaxAge:   int(s.config.JWT.RefreshTokenExpiry.Seconds()),
-        HttpOnly: true,
-        Secure:   s.config.Server.Env == "production",
-        SameSite: http.SameSiteStrictMode,
-    }
-    
-    http.SetCookie(w, cookie)
+// setAuthCookies is a helper to set both access and refresh token cookies.
+func (s *Service) setAuthCookies(w http.ResponseWriter, accessToken, refreshToken string) {
+	accessCookie := &http.Cookie{
+		Name:     "access_token",
+		Value:    accessToken,
+		Path:     "/",
+		Expires:  time.Now().Add(s.config.JWT.AccessTokenExpiry),
+		HttpOnly: true,
+		Secure:   s.config.Server.Env == "production",
+		SameSite: http.SameSiteStrictMode,
+	}
+	http.SetCookie(w, accessCookie)
+
+	refreshCookie := &http.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		Path:     "/api/auth/refresh",
+		Expires:  time.Now().Add(s.config.JWT.RefreshTokenExpiry),
+		HttpOnly: true,
+		Secure:   s.config.Server.Env == "production",
+		SameSite: http.SameSiteStrictMode,
+	}
+	http.SetCookie(w, refreshCookie)
+}
+
+// clearAuthCookies clears both authentication cookies during logout.
+func (s *Service) clearAuthCookies(w http.ResponseWriter) {
+	accessCookie := &http.Cookie{
+		Name:     "access_token",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+	}
+	http.SetCookie(w, accessCookie)
+
+	refreshCookie := &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+	}
+	http.SetCookie(w, refreshCookie)
 }
 
 func (s *Service) enforceDeviceLimit(ctx context.Context, userID string) error {

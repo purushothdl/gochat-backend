@@ -107,19 +107,10 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		refreshToken = cookie.Value
 	}
 
-	if err := h.service.Logout(r.Context(), refreshToken); err != nil {
+	if err := h.service.Logout(r.Context(), w, refreshToken); err != nil {
 		response.Error(w, http.StatusInternalServerError, err)
 		return
 	}
-
-	// Clear refresh token cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-	})
 
 	response.JSON(w, http.StatusOK, response.MessageResponse{Message: "Logged out successfully"})
 }
