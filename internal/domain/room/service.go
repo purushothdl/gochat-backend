@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/purushothdl/gochat-backend/internal/config"
+	"github.com/purushothdl/gochat-backend/internal/shared/types"
 	"github.com/purushothdl/gochat-backend/pkg/errors"
 )
 
@@ -135,7 +136,7 @@ func (s *Service) ListPublicRooms(ctx context.Context) ([]*Room, error) {
 }
 
 // ListMembers retrieves the member list for a room, ensuring the requester is a member.
-func (s *Service) ListMembers(ctx context.Context, requesterID, roomID string) ([]*MemberDetail, error) {
+func (s *Service) ListMembers(ctx context.Context, requesterID, roomID string) ([]*types.MemberDetail, error) {
 	// Authorization: Verify the user requesting the list is a member of the room.
 	if _, err := s.roomRepo.FindMembership(ctx, roomID, requesterID); err != nil {
 		return nil, err 

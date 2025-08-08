@@ -24,6 +24,17 @@ type PaginatedMessagesResponse struct {
 	HasMore    bool               `json:"has_more"`
 }
 
+type ReceiptDetailsResponse struct {
+	ReadBy      []*types.ReceiptInfo `json:"read_by"`
+	DeliveredTo []*types.ReceiptInfo `json:"delivered_to"`
+}
+
+type MessageWithSeenFlag struct {
+	Message
+	IsSeenByUser bool
+	User         *types.BasicUser
+}
+
 func (m *MessageWithSeenFlag) ToResponse() *MessageResponse {
 	// For soft-deleted messages, mask the content.
 	if m.DeletedAt != nil {

@@ -86,6 +86,7 @@ func (c *Container) Build() error {
 		c.MessageRepo,
 		c.RoomRepo,
 		c.UserRepo,
+		nil, // TODO: Add Redis presence provider later
 		c.Config,
 		c.Logger,
 	)

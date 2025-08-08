@@ -2,6 +2,7 @@ package http
 
 import (
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -68,7 +69,7 @@ func (rt *Router) SetupRoutes(cfg *config.Config, logger *slog.Logger) *chi.Mux 
 
 		r.Route("/user", func(r chi.Router) {
 			r.Use(rt.authMw.RequireAuth)
-			
+
 			r.Get("/profile", rt.userHandler.GetProfile)      // Get user profile
 			r.Put("/profile", rt.userHandler.UpdateProfile)   // Update user profile
 			r.Put("/settings", rt.userHandler.UpdateSettings) // Update user settings
@@ -101,8 +102,8 @@ func (rt *Router) SetupRoutes(cfg *config.Config, logger *slog.Logger) *chi.Mux 
 			r.Put("/{room_id}/settings", rt.roomHandler.UpdateRoomSettings) // Update room settings
 
 			// Message operations within a room
-			r.Post("/{room_id}/messages", rt.messageHandler.SendMessage)     // Send a message to a specific room
-			r.Get("/{room_id}/messages", rt.messageHandler.GetMessages)      // Get message history for a room
+			r.Post("/{room_id}/messages", rt.messageHandler.SendMessage) // Send a message to a specific room
+			r.Get("/{room_id}/messages", rt.messageHandler.GetMessages)  // Get message history for a room
 		})
 
 		r.Route("/messages", func(r chi.Router) {
@@ -121,6 +122,10 @@ func (rt *Router) SetupRoutes(cfg *config.Config, logger *slog.Logger) *chi.Mux 
 			r.Post("/bulk_seen", rt.messageHandler.MarkMessagesSeen) // Mark multiple messages as seen
 		})
 	})
+
+	// Serve static files from the 'tests' directory for local development
+	// Access via http://localhost:8080/tests/websocket_client.html
+	r.Handle("/tests/*", http.StripPrefix("/tests/", http.FileServer(http.Dir("./tests"))))
 
 	return r
 }

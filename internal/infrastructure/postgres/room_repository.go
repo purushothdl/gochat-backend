@@ -149,7 +149,7 @@ func (r *RoomRepository) ListPublicRooms(ctx context.Context) ([]*room.Room, err
 }
 
 // ListMembers retrieves all members of a specific room, along with their public user details.
-func (r *RoomRepository) ListMembers(ctx context.Context, roomID string) ([]*room.MemberDetail, error) {
+func (r *RoomRepository) ListMembers(ctx context.Context, roomID string) ([]*types.MemberDetail, error) {
 	query := `
         SELECT rm.room_id, rm.user_id, rm.role, u.name, u.image_url
         FROM room_memberships rm
@@ -162,9 +162,9 @@ func (r *RoomRepository) ListMembers(ctx context.Context, roomID string) ([]*roo
 	}
 	defer rows.Close()
 
-	var members []*room.MemberDetail
+	var members []*types.MemberDetail
 	for rows.Next() {
-		var m room.MemberDetail
+		var m types.MemberDetail
 		var imageURL *string 
 
 		if err := rows.Scan(&m.RoomID, &m.UserID, &m.Role, &m.Name, &imageURL); err != nil {

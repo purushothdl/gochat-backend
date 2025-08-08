@@ -21,20 +21,26 @@ var upgrader = websocket.Upgrader{
 
 // ServeWs handles websocket requests from the peer.
 func ServeWs(hub *Hub, cfg *config.Config, logger *slog.Logger, w http.ResponseWriter, r *http.Request) {
+	logger.Info("Incoming WebSocket request headers", "headers", r.Header)
+
 	// 1. Authenticate the user from the access_token cookie.
 	cookie, err := r.Cookie("access_token")
 	if err != nil {
+		logger.Error("Failed to get access_token cookie", "error", err) 
 		http.Error(w, "Unauthorized: No access token", http.StatusUnauthorized)
 		return
 	}
 	accessToken := cookie.Value
+	logger.Info("Access token cookie found", "token_present", len(accessToken) > 0) 
 
 	claims, err := auth.ValidateAccessToken(accessToken, cfg.JWT.Secret)
 	if err != nil {
+		logger.Error("Failed to validate access token", "error", err) 
 		http.Error(w, "Unauthorized: Invalid access token", http.StatusUnauthorized)
 		return
 	}
 	userID := claims.UserID
+	logger.Info("User authenticated via WebSocket", "user_id", userID) 
 
 	// 2. Upgrade the HTTP connection to a WebSocket connection.
 	conn, err := upgrader.Upgrade(w, r, nil)

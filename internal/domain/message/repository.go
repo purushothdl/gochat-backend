@@ -7,17 +7,6 @@ import (
 	"github.com/purushothdl/gochat-backend/internal/shared/types"
 )
 
-type PaginationCursor struct {
-	Timestamp time.Time
-	Limit     int
-}
-
-type MessageWithSeenFlag struct {
-	Message
-	IsSeenByUser bool
-	User         *types.BasicUser
-}
-
 type Repository interface {
 	CreateMessage(ctx context.Context, msg *Message) error
 	GetMessageByID(ctx context.Context, messageID string) (*Message, error)
@@ -30,5 +19,5 @@ type Repository interface {
 	GetLatestTimestampForMessages(ctx context.Context, messageIDs []string) (*time.Time, error)
 	UpdateRoomReadMarker(ctx context.Context, roomID, userID string, timestamp time.Time) error
 	CreateBulkReadReceipts(ctx context.Context, roomID, userID string, messageIDs []string) error
-	GetMessageReceipts(ctx context.Context, messageID string) ([]*types.BasicUser, error)
+	GetMessageReceipts(ctx context.Context, messageID string) ([]*types.ReceiptInfo, error) 
 }

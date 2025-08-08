@@ -3,6 +3,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -145,9 +146,9 @@ func (r *MessageRepository) UpdateRoomReadMarker(ctx context.Context, roomID, us
 
 func (r *MessageRepository) CreateBulkReadReceipts(ctx context.Context, roomID, userID string, messageIDs []string) error {
 	// pgx's large batch insert is the most efficient way to handle this.
-	rows := make([][]interface{}, len(messageIDs))
+	rows := make([][]any, len(messageIDs))
 	for i, msgID := range messageIDs {
-		rows[i] = []interface{}{msgID, userID, roomID}
+		rows[i] = []any{msgID, userID, roomID}
 	}
 
 	_, err := r.pool.CopyFrom(
@@ -159,13 +160,14 @@ func (r *MessageRepository) CreateBulkReadReceipts(ctx context.Context, roomID, 
 	return err
 }
 
-func (r *MessageRepository) GetMessageReceipts(ctx context.Context, messageID string) ([]*types.BasicUser, error) {
-	// This query now correctly selects only the columns needed for a BasicUser.
+// GetMessageReceipts retrieves the user info and the read timestamp for everyone who has seen a message.
+func (r *MessageRepository) GetMessageReceipts(ctx context.Context, messageID string) ([]*types.ReceiptInfo, error) {
 	query := `
-        SELECT u.id, u.name, u.image_url
+        SELECT u.id, u.name, u.image_url, mrr.read_at
         FROM users u
         JOIN message_read_receipts mrr ON u.id = mrr.user_id
         WHERE mrr.message_id = $1 AND u.deleted_at IS NULL
+        ORDER BY mrr.read_at ASC
     `
 	rows, err := r.pool.Query(ctx, query, messageID)
 	if err != nil {
@@ -173,15 +175,24 @@ func (r *MessageRepository) GetMessageReceipts(ctx context.Context, messageID st
 	}
 	defer rows.Close()
 
-	var users []*types.BasicUser
+	var receipts []*types.ReceiptInfo
 	for rows.Next() {
-		user, err := scanBasicUserFromRow(rows)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan receipt user: %w", err)
-}
-		users = append(users, user)
+		var user types.BasicUser
+		var imageURL sql.NullString
+		var receipt types.ReceiptInfo
+
+		if err := rows.Scan(&user.ID, &user.Name, &imageURL, &receipt.Timestamp); err != nil {
+			return nil, fmt.Errorf("failed to scan message receipt: %w", err)
+		}
+
+		if imageURL.Valid {
+			user.ImageURL = imageURL.String
+		}
+		
+		receipt.User = &user
+		receipts = append(receipts, &receipt)
 	}
-	return users, nil
+	return receipts, nil
 }
 
 // ============================================================================

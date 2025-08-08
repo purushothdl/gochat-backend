@@ -18,3 +18,8 @@ type BulkSeenRequest struct {
 type ReadMarkerRequest struct {
 	LastReadTimestamp time.Time `json:"last_read_timestamp" validate:"required"`
 }
+
+type PaginationCursor struct {
+	Timestamp time.Time
+	Limit     int
+}

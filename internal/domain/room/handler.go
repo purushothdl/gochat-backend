@@ -137,7 +137,7 @@ func (h *Handler) ListMembers(w http.ResponseWriter, r *http.Request) {
 
 	memberResponses := make([]*MemberResponse, len(members))
 	for i, member := range members {
-		memberResponses[i] = member.ToResponse()
+		memberResponses[i] = MemberDetailToResponse(member)
 	}
 
 	response.JSON(w, http.StatusOK, memberResponses)

@@ -1,6 +1,10 @@
 package room
 
-import "time"
+import (
+	"time"
+
+	"github.com/purushothdl/gochat-backend/internal/shared/types"
+)
 
 
 type RoomResponse struct {
@@ -12,10 +16,10 @@ type RoomResponse struct {
 }
 
 type MemberResponse struct {
-	UserID   string     `json:"user_id"`
-	Role     MemberRole `json:"role"`
-	Name     string     `json:"name"`
-	ImageURL string     `json:"image_url"`
+	UserID   string            `json:"user_id"`
+	Role     types.MemberRole  `json:"role"`
+	Name     string            `json:"name"`
+	ImageURL string            `json:"image_url"`
 }
 
 func (r *Room) ToResponse() *RoomResponse {
@@ -28,10 +32,10 @@ func (r *Room) ToResponse() *RoomResponse {
 	}
 }
 
-func (d *MemberDetail) ToResponse() *MemberResponse {
+func MemberDetailToResponse(d *types.MemberDetail) *MemberResponse {
 	return &MemberResponse{
 		UserID:   d.UserID,
-		Role:     d.Role,
+		Role:     types.MemberRole(d.Role), 
 		Name:     d.Name,
 		ImageURL: d.ImageURL,
 	}

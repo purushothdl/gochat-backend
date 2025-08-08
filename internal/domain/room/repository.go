@@ -1,6 +1,10 @@
 package room
 
-import "context"
+import (
+	"context"
+
+	"github.com/purushothdl/gochat-backend/internal/shared/types"
+)
 
 // Repository defines the persistence interface for room and membership data.
 type Repository interface {
@@ -14,6 +18,6 @@ type Repository interface {
 	UpdateMembership(ctx context.Context, membership *RoomMembership) error
 	DeleteMembership(ctx context.Context, roomID, userID string) error
 	ListUserRooms(ctx context.Context, userID string) ([]*Room, error)
-	ListMembers(ctx context.Context, roomID string) ([]*MemberDetail, error)
+	ListMembers(ctx context.Context, roomID string) ([]*types.MemberDetail, error)
 	CountAdmins(ctx context.Context, roomID string) (int, error) 
 }

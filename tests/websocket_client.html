@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GoChat WebSocket Client</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1, h2 { color: #0056b3; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="email"], input[type="password"], input[type="text"] {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #status { margin-top: 20px; padding: 10px; border-radius: 4px; }
+        .status-connected { background-color: #e6ffe6; border: 1px solid #00cc00; color: #006600; }
+        .status-disconnected { background-color: #ffe6e6; border: 1px solid #cc0000; color: #660000; }
+        #messages {
+            border: 1px solid #ddd;
+            padding: 10px;
+            height: 300px;
+            overflow-y: scroll;
+            margin-top: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        .message-input-area {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .message-input-area input {
+            flex-grow: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GoChat WebSocket Test Client</h1>
+
+        <section id="login-section">
+            <h2>Login</h2>
+            <form id="login-form">
+                <label for="email">Email:</label>
+                <input type="email" id="email" value="test@example.com" required><br>
+                <label for="password">Password:</label>
+                <input type="password" id="password" value="password123" required><br>
+                <button type="submit">Login and Connect WebSocket</button>
+            </form>
+            <p id="login-message" style="color: red;"></p>
+        </section>
+
+        <section id="websocket-section" style="display: none;">
+            <h2>WebSocket Chat</h2>
+            <div id="status">Connecting...</div>
+            <div id="messages"></div>
+            <div class="message-input-area">
+                <input type="text" id="message-input" placeholder="Type a message...">
+                <button id="send-button">Send</button>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const loginForm = document.getElementById('login-form');
+        const loginMessage = document.getElementById('login-message');
+        const loginSection = document.getElementById('login-section');
+        const websocketSection = document.getElementById('websocket-section');
+        const wsStatus = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+
+        const HTTP_API_URL = 'http://localhost:8080/api/auth/login';
+        const WS_URL = 'ws://localhost:8081/ws';
+        let ws = null;
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            loginMessage.textContent = ''; // Clear previous messages
+
+            try {
+                const response = await fetch(HTTP_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password }),
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Login successful:', data);
+                    loginMessage.textContent = 'Login successful! Connecting to WebSocket...';
+                    loginMessage.style.color = 'green';
+                    
+                    // Hide login, show websocket section
+                    loginSection.style.display = 'none';
+                    websocketSection.style.display = 'block';
+
+                    connectWebSocket();
+
+                } else {
+                    const errorData = await response.json();
+                    loginMessage.textContent = `Login failed: ${errorData.message || response.statusText}`;
+                    loginMessage.style.color = 'red';
+                    console.error('Login failed:', errorData);
+                }
+            } catch (error) {
+                loginMessage.textContent = `Network error: ${error.message}`;
+                loginMessage.style.color = 'red';
+                console.error('Network error during login:', error);
+            }
+        });
+
+        function connectWebSocket() {
+            wsStatus.textContent = 'Connecting...';
+            wsStatus.className = ''; // Clear classes
+
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                wsStatus.textContent = 'Connected!';
+                wsStatus.className = 'status-connected';
+                messagesDiv.innerHTML += '<p><em>Connected to WebSocket server.</em></p>';
+                console.log('WebSocket Connected');
+            };
+
+            ws.onmessage = (event) => {
+                messagesDiv.innerHTML += `<p><strong>Received:</strong> ${event.data}</p>`;
+                messagesDiv.scrollTop = messagesDiv.scrollHeight; // Auto-scroll
+            };
+
+            ws.onclose = (event) => {
+                wsStatus.textContent = `Disconnected: Code ${event.code}, Reason: ${event.reason}`;
+                wsStatus.className = 'status-disconnected';
+                messagesDiv.innerHTML += `<p style="color: red;"><em>Disconnected from WebSocket server.</em></p>`;
+                console.log('WebSocket Disconnected:', event);
+                ws = null; // Clear the WebSocket object
+            };
+
+            ws.onerror = (error) => {
+                wsStatus.textContent = 'Error! Check console.';
+                wsStatus.className = 'status-disconnected';
+                console.error('WebSocket Error:', error);
+            };
+        }
+
+        sendButton.addEventListener('click', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const message = messageInput.value;
+                if (message) {
+                    ws.send(message);
+                    messagesDiv.innerHTML += `<p><strong>Sent:</strong> ${message}</p>`;
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                    messageInput.value = ''; // Clear input
+                }
+            } else {
+                alert('WebSocket is not connected.');
+            }
+        });
+
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendButton.click();
+            }
+        });
+
+    </script>
+</body>
+</html>

@@ -30,3 +30,11 @@ type MembershipInfo struct {
 	UserID string
 	Role   MemberRole
 }
+
+type MemberDetail struct {
+	RoomID   string
+	UserID   string
+	Role     MemberRole
+	Name     string 
+	ImageURL string 
+}

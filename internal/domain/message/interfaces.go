@@ -10,9 +10,15 @@ import (
 type RoomProvider interface {
 	GetRoomInfo(ctx context.Context, roomID string) (*types.RoomInfo, error)
 	GetMembershipInfo(ctx context.Context, roomID, userID string) (*types.MembershipInfo, error)
+	ListMembers(ctx context.Context, roomID string) ([]*types.MemberDetail, error)
 }
 
 // UserProvider defines the methods the message service needs about users.
 type UserProvider interface {
 	IsBlocked(ctx context.Context, userID1, userID2 string) (bool, error)
+}
+
+// PresenceProvider defines the method needed to check online status.
+type PresenceProvider interface {
+	GetOnlineUserIDs(ctx context.Context, roomID string) ([]string, error)
 }

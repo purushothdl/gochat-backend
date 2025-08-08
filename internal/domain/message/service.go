@@ -13,21 +13,30 @@ import (
 )
 
 type Service struct {
-	msgRepo  Repository
-	roomProv RoomProvider
-	userProv UserProvider
-	config   *config.Config
-	logger   *slog.Logger
+	msgRepo      Repository
+	roomProv     RoomProvider
+	userProv     UserProvider
+	presenceProv PresenceProvider
+	config       *config.Config
+	logger       *slog.Logger
 	// redis publisher will be injected here
 }
 
-func NewService(msgRepo Repository, roomProv RoomProvider, userProv UserProvider, cfg *config.Config, logger *slog.Logger) *Service {
+func NewService(
+	msgRepo      Repository,
+	roomProv     RoomProvider,
+	userProv     UserProvider,
+	presenceProv PresenceProvider,
+	cfg          *config.Config,
+	logger       *slog.Logger,
+) *Service {
 	return &Service{
-		msgRepo:  msgRepo,
-		roomProv: roomProv,
-		userProv: userProv,
-		config:   cfg,
-		logger:   logger,
+		msgRepo:      msgRepo,
+		roomProv:     roomProv,
+		userProv:     userProv,
+		presenceProv: presenceProv,
+		config:       cfg,
+		logger:       logger,
 	}
 }
 
@@ -113,7 +122,7 @@ func (s *Service) MarkMessagesAsSeen(ctx context.Context, userID, roomID string,
 	// Step 1: Persist the individual receipts for the "blue tick" system.
 	err := s.msgRepo.CreateBulkReadReceipts(ctx, roomID, userID, messageIDs)
 	if err != nil {
-		return err 
+		return err
 	}
 	// TODO: Publish real-time event to notify sender of 'seen' status.
 
@@ -128,18 +137,75 @@ func (s *Service) MarkMessagesAsSeen(ctx context.Context, userID, roomID string,
 	if err := s.msgRepo.UpdateRoomReadMarker(ctx, roomID, userID, *latestTimestamp); err != nil {
 		s.logger.Error("failed to update room read marker during bulk seen", "error", err)
 	}
-    // TODO: Publish real-time event to update unread count on other devices.
+	// TODO: Publish real-time event to update unread count on other devices.
 
 	return nil
 }
 
-func (s *Service) GetMessageReceipts(ctx context.Context, actorID, messageID string) ([]*types.BasicUser, error) {
+func (s *Service) GetMessageReceipts(ctx context.Context, actorID, messageID string) (*ReceiptDetailsResponse, error) {
+	// 1. Authorize and get basic message/room info
 	msg, err := s.msgRepo.GetMessageByID(ctx, messageID)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.roomProv.GetMembershipInfo(ctx, msg.RoomID, actorID); err != nil {
+	// This provider needs to be implemented on the RoomRepository to get all members
+	allMembers, err := s.roomProv.ListMembers(ctx, msg.RoomID)
+	if err != nil {
 		return nil, err
 	}
-	return s.msgRepo.GetMessageReceipts(ctx, messageID)
+
+	// 2. Get the "Read By" list (from the existing repository method)
+	readByReceipts, err := s.msgRepo.GetMessageReceipts(ctx, messageID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Get the "Online" list (from our new provider)
+	onlineUserIDs, err := s.presenceProv.GetOnlineUserIDs(ctx, msg.RoomID)
+	if err != nil {
+		// If Redis fails, we can gracefully degrade: return the "Read By" list and an empty "Delivered To" list.
+		s.logger.Error("failed to get online users for receipts", "error", err)
+		onlineUserIDs = []string{}
+	}
+
+	// 4. Perform the set logic designed
+	readByMap := make(map[string]bool)
+	for _, receipt := range readByReceipts {
+		readByMap[receipt.User.ID] = true
+	}
+
+	onlineMap := make(map[string]bool)
+	for _, userID := range onlineUserIDs {
+		onlineMap[userID] = true
+	}
+
+	resp := &ReceiptDetailsResponse{
+		ReadBy:      readByReceipts,
+		DeliveredTo: []*types.ReceiptInfo{},
+	}
+
+	for _, member := range allMembers {
+		// Skip the original sender
+		if msg.UserID != nil && member.UserID == *msg.UserID {
+			continue
+		}
+
+		// Check if the member has read the message
+		if _, hasRead := readByMap[member.UserID]; hasRead {
+			continue
+		}
+
+		// If not read, check if they are online to be marked as "Delivered"
+		if _, isOnline := onlineMap[member.UserID]; isOnline {
+			resp.DeliveredTo = append(resp.DeliveredTo, &types.ReceiptInfo{
+				User: &types.BasicUser{
+					ID:       member.UserID,
+					Name:     member.Name,
+					ImageURL: member.ImageURL,
+				},
+			})
+		}
+	}
+
+	return resp, nil
 }

@@ -41,14 +41,6 @@ type RoomMembership struct {
 	UpdatedAt time.Time
 }
 
-type MemberDetail struct {
-	RoomID   string
-	UserID   string
-	Role     MemberRole
-	Name     string 
-	ImageURL string 
-}
-
 // NewPrivateRoom creates a new Room entity for a private chat.
 func NewPrivateRoom(name string) *Room {
 	return &Room{
