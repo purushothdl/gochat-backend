@@ -26,3 +26,7 @@ type PasswordResetToken struct {
 	UserID    string
 	ExpiresAt time.Time
 }
+
+type LogoutDeviceRequest struct {
+	DeviceID string `json:"device_id" validate:"required"`
+}

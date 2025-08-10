@@ -25,3 +25,15 @@ type RefreshTokenResponse struct {
 type MeResponse struct {
     User UserInfo `json:"user"`
 }
+
+type DeviceInfo struct {
+	ID         string    `json:"id"`
+	DeviceInfo string    `json:"device_info"`
+	IPAddress  string    `json:"ip_address"`
+	LastUsedAt time.Time `json:"last_used_at"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type ListDevicesResponse struct {
+	Devices []*DeviceInfo `json:"devices"`
+}

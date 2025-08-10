@@ -16,8 +16,6 @@ import (
 	"github.com/purushothdl/gochat-backend/pkg/utils/tokenutil"
 )
 
-const MaxDevicesPerUser = 5
-
 type Service struct {
 	authRepo          Repository
 	userRepo          UserRepository
@@ -107,7 +105,6 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest, w http.Resp
 func (s *Service) RefreshAccessToken(ctx context.Context, refreshTokenString, deviceInfo, ipAddress, userAgent string) (*RefreshTokenResponse, error) {
 	tokenHash := auth.HashRefreshToken(refreshTokenString)
 
-	// Get refresh token from database
 	refreshToken, err := s.authRepo.GetRefreshToken(ctx, tokenHash)
 	if err != nil {
 		return nil, ErrRefreshTokenNotFound
@@ -248,7 +245,7 @@ func (s *Service) Logout(ctx context.Context, w http.ResponseWriter, refreshToke
 	s.clearAuthCookies(w)
 
 	if refreshTokenString == "" {
-		return nil // Already logged out
+		return nil
 	}
 
 	tokenHash := auth.HashRefreshToken(refreshTokenString)
@@ -257,6 +254,40 @@ func (s *Service) Logout(ctx context.Context, w http.ResponseWriter, refreshToke
 
 func (s *Service) LogoutAllDevices(ctx context.Context, userID string) error {
 	return s.authRepo.DeleteUserRefreshTokens(ctx, userID)
+}
+
+func (s *Service) ListDevices(ctx context.Context, userID string) ([]*DeviceInfo, error) {
+	tokens, err := s.authRepo.GetUserRefreshTokens(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user devices: %w", err)
+	}
+
+	devices := make([]*DeviceInfo, 0, len(tokens))
+	for _, token := range tokens {
+		devices = append(devices, &DeviceInfo{
+			ID:         token.ID,
+			DeviceInfo: token.DeviceInfo,
+			IPAddress:  token.IPAddress,
+			LastUsedAt: token.LastUsedAt,
+			CreatedAt:  token.CreatedAt,
+		})
+	}
+
+	return devices, nil
+}
+
+func (s *Service) LogoutDevice(ctx context.Context, userID, deviceID string) error {
+	// Verify the device belongs to the user
+	token, err := s.authRepo.GetRefreshTokenByID(ctx, deviceID)
+	if err != nil {
+		return fmt.Errorf("failed to get refresh token: %w", err)
+	}
+
+	if token.UserID != userID {
+		return ErrUnauthorized
+	}
+
+	return s.authRepo.DeleteRefreshTokenByID(ctx, deviceID)
 }
 
 // ============================================================================
@@ -323,7 +354,7 @@ func (s *Service) setAuthCookies(w http.ResponseWriter, accessToken, refreshToke
 		Value:    accessToken,
 		Path:     "/",
 		Expires:  time.Now().Add(s.config.JWT.AccessTokenExpiry),
-		HttpOnly: true, 
+		HttpOnly: true,
 		Secure:   s.config.Server.Env == "production",
 		SameSite: http.SameSiteStrictMode,
 	}
@@ -340,7 +371,7 @@ func (s *Service) setAuthCookies(w http.ResponseWriter, accessToken, refreshToke
 	refreshCookie := &http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
-		Path:     "/api/auth/refresh",
+		Path:     "/",
 		Expires:  time.Now().Add(s.config.JWT.RefreshTokenExpiry),
 		HttpOnly: true,
 		Secure:   s.config.Server.Env == "production",
@@ -381,7 +412,7 @@ func (s *Service) enforceDeviceLimit(ctx context.Context, userID string) error {
 		return err
 	}
 
-	if count >= MaxDevicesPerUser {
+	if count >= s.config.Security.MaxDevicesPerUser {
 		return s.authRepo.DeleteOldestUserToken(ctx, userID)
 	}
 

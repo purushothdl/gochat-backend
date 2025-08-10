@@ -32,26 +32,27 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
-    URL             string
-    Host            string
-    Port            string
-    User            string
-    Password        string
-    Name            string
-    MaxOpenConns    int
-    MaxIdleConns    int
-    ConnMaxLifetime time.Duration
-    ConnMaxIdleTime time.Duration
+	URL             string
+	Host            string
+	Port            string
+	User            string
+	Password        string
+	Name            string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+	ConnMaxIdleTime time.Duration
 }
 
 type JWTConfig struct {
-    Secret             string
-    AccessTokenExpiry  time.Duration
-    RefreshTokenExpiry time.Duration
+	Secret             string
+	AccessTokenExpiry  time.Duration
+	RefreshTokenExpiry time.Duration
 }
 
 type SecurityConfig struct {
-    BcryptCost int
+	BcryptCost        int
+	MaxDevicesPerUser int
 }
 
 type CORSConfig struct {
@@ -68,8 +69,8 @@ type ResendConfig struct {
 }
 
 func Load() (*Config, error) {
-    return &Config{
-        App: AppConfig{
+	return &Config{
+		App: AppConfig{
 			ClientURL: getEnv("CLIENT_URL", "http://localhost:3000"),
 		},
 
@@ -80,72 +81,72 @@ func Load() (*Config, error) {
 			WriteTimeout:    parseDuration("SERVER_WRITE_TIMEOUT", "10s"),
 			IdleTimeout:     parseDuration("SERVER_IDLE_TIMEOUT", "120s"),
 			ShutdownTimeout: parseDuration("SERVER_SHUTDOWN_TIMEOUT", "30s"),
-        },
+		},
 
-        Database: DatabaseConfig{
-            URL:             getEnv("DATABASE_URL", ""),
-            Host:            getEnv("DB_HOST", "localhost"),
-            Port:            getEnv("DB_PORT", "5432"),
-            User:            getEnv("DB_USER", ""),
-            Password:        getEnv("DB_PASSWORD", ""),
-            Name:            getEnv("DB_NAME", "gochat"),
-            MaxOpenConns:    parseInt("DB_MAX_OPEN_CONNS", 25),
-            MaxIdleConns:    parseInt("DB_MAX_IDLE_CONNS", 5),
-            ConnMaxLifetime: parseDuration("DB_CONN_MAX_LIFETIME", "5m"),
-            ConnMaxIdleTime: parseDuration("DB_CONN_MAX_IDLE_TIME", "5m"),
-        },
+		Database: DatabaseConfig{
+			URL:             getEnv("DATABASE_URL", ""),
+			Host:            getEnv("DB_HOST", "localhost"),
+			Port:            getEnv("DB_PORT", "5432"),
+			User:            getEnv("DB_USER", ""),
+			Password:        getEnv("DB_PASSWORD", ""),
+			Name:            getEnv("DB_NAME", "gochat"),
+			MaxOpenConns:    parseInt("DB_MAX_OPEN_CONNS", 25),
+			MaxIdleConns:    parseInt("DB_MAX_IDLE_CONNS", 5),
+			ConnMaxLifetime: parseDuration("DB_CONN_MAX_LIFETIME", "5m"),
+			ConnMaxIdleTime: parseDuration("DB_CONN_MAX_IDLE_TIME", "5m"),
+		},
 
-        JWT: JWTConfig{
-            Secret:             getEnv("JWT_SECRET", "your-secret-key"),
-            AccessTokenExpiry:  parseDuration("JWT_EXPIRY", "15m"),
-            RefreshTokenExpiry: parseDuration("REFRESH_TOKEN_EXPIRY", "30d"),
-        },
+		JWT: JWTConfig{
+			Secret:             getEnv("JWT_SECRET", "your-secret-key"),
+			AccessTokenExpiry:  parseDuration("JWT_EXPIRY", "15m"),
+			RefreshTokenExpiry: parseDuration("REFRESH_TOKEN_EXPIRY", "168h"),
+		},
 
-        Security: SecurityConfig{
-            BcryptCost: parseInt("BCRYPT_COST", 12),
-        },
+		Security: SecurityConfig{
+			BcryptCost:        parseInt("BCRYPT_COST", 12),
+			MaxDevicesPerUser: parseInt("MAX_DEVICES_PER_USER", 5),
+		},
 
-        CORS: CORSConfig{
+		CORS: CORSConfig{
 			AllowedOrigins:   strings.Split(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173"), ","),
 			AllowedMethods:   strings.Split(getEnv("CORS_ALLOWED_METHODS", "GET,POST,PUT,DELETE,OPTIONS"), ","),
 			AllowedHeaders:   strings.Split(getEnv("CORS_ALLOWED_HEADERS", "Accept,Authorization,Content-Type"), ","),
 			AllowCredentials: getEnvAsBool("CORS_ALLOW_CREDENTIALS", true),
 		},
 
-        Resend: ResendConfig{
+		Resend: ResendConfig{
 			APIKey:    getEnv("RESEND_API_KEY", ""),
 			FromEmail: getEnv("RESEND_FROM_EMAIL", "onboarding@resend.dev"),
 			FromName:  getEnv("RESEND_FROM_NAME", "GoChat"),
 		},
-        
-    }, nil
-    
+	}, nil
+
 }
 
 func getEnv(key, defaultValue string) string {
-    if value := os.Getenv(key); value != "" {
-        return value
-    }
-    return defaultValue
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 func parseDuration(key, defaultValue string) time.Duration {
-    if value := os.Getenv(key); value != "" {
-        if d, err := time.ParseDuration(value); err == nil {
-            return d
-        }
-    }
-    d, _ := time.ParseDuration(defaultValue)
-    return d
+	if value := os.Getenv(key); value != "" {
+		if d, err := time.ParseDuration(value); err == nil {
+			return d
+		}
+	}
+	d, _ := time.ParseDuration(defaultValue)
+	return d
 }
 
 func parseInt(key string, defaultValue int) int {
-    if value := os.Getenv(key); value != "" {
-        if i, err := strconv.Atoi(value); err == nil {
-            return i
-        }
-    }
-    return defaultValue
+	if value := os.Getenv(key); value != "" {
+		if i, err := strconv.Atoi(value); err == nil {
+			return i
+		}
+	}
+	return defaultValue
 }
 
 func getEnvAsBool(key string, defaultValue bool) bool {

@@ -9,4 +9,5 @@ var (
     ErrInvalidToken         = errors.New("INVALID_TOKEN", "Invalid or malformed token", 401)
     ErrTooManyDevices       = errors.New("TOO_MANY_DEVICES", "Maximum number of devices reached", 429)
     ErrRefreshTokenNotFound = errors.New("REFRESH_TOKEN_NOT_FOUND", "Refresh token not found", 401)
+    ErrUnauthorized         = errors.New("UNAUTHORIZED", "Unauthorized access", 401)
 )

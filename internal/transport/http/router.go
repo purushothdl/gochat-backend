@@ -58,13 +58,15 @@ func (rt *Router) SetupRoutes(cfg *config.Config, logger *slog.Logger) *chi.Mux 
 	// API routes
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
-			r.Post("/register", rt.authHandler.Register)                // Register a new user
-			r.Post("/login", rt.authHandler.Login)                      // User login
-			r.Post("/refresh", rt.authHandler.RefreshToken)             // Refresh access token
-			r.Post("/logout", rt.authHandler.Logout)                    // User logout
-			r.Post("/forgot-password", rt.authHandler.ForgotPassword)   // Initiate password reset
-			r.Post("/reset-password", rt.authHandler.ResetPassword)     // Complete password reset
-			r.With(rt.authMw.RequireAuth).Get("/me", rt.authHandler.Me) // Get current user info
+			r.Post("/register", rt.authHandler.Register)                                      // Register a new user
+			r.Post("/login", rt.authHandler.Login)                                            // User login
+			r.Post("/refresh", rt.authHandler.RefreshToken)                                   // Refresh access token
+			r.Post("/logout", rt.authHandler.Logout)                                          // User logout
+			r.Post("/forgot-password", rt.authHandler.ForgotPassword)                         // Initiate password reset
+			r.Post("/reset-password", rt.authHandler.ResetPassword)                           // Complete password reset
+			r.With(rt.authMw.RequireAuth).Get("/me", rt.authHandler.Me)                       // Get current user info
+			r.With(rt.authMw.RequireAuth).Get("/devices", rt.authHandler.ListDevices)         // List authenticated user's devices
+			r.With(rt.authMw.RequireAuth).Post("/logout-device", rt.authHandler.LogoutDevice) // Logout from a specific device
 		})
 
 		r.Route("/user", func(r chi.Router) {

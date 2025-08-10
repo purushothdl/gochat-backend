@@ -34,7 +34,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
 	// Validate the request body
 	if errs := h.validator.Validate(req); errs != nil {
-		response.ErrorJSON(w, http.StatusUnprocessableEntity, errs) 
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, errs)
 		return
 	}
 
@@ -60,7 +60,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if errs := h.validator.Validate(req); errs != nil {
-		response.ErrorJSON(w, http.StatusUnprocessableEntity, errs) 
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, errs)
 		return
 	}
 
@@ -140,7 +140,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if errs := h.validator.Validate(req); errs != nil {
-		response.ErrorJSON(w, http.StatusUnprocessableEntity, errs) 
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, errs)
 		return
 	}
 
@@ -164,14 +164,51 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if errs := h.validator.Validate(req); errs != nil {
-		response.ErrorJSON(w, http.StatusUnprocessableEntity, errs) 
+		response.ErrorJSON(w, http.StatusUnprocessableEntity, errs)
 		return
 	}
-	
+
 	if err := h.service.ResetPassword(r.Context(), req.Token, req.Password); err != nil {
-		response.Error(w, http.StatusBadRequest, err) 
+		response.Error(w, http.StatusBadRequest, err)
 		return
 	}
 
 	response.JSON(w, http.StatusOK, response.MessageResponse{Message: "Your password has been reset successfully."})
+}
+
+func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authMiddleware.GetUserID(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, ErrInvalidToken)
+		return
+	}
+
+	devices, err := h.service.ListDevices(r.Context(), userID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, ListDevicesResponse{Devices: devices})
+}
+
+func (h *Handler) LogoutDevice(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authMiddleware.GetUserID(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, ErrInvalidToken)
+		return
+	}
+
+	var req LogoutDeviceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, err)
+		return
+	}
+
+	if err := h.service.LogoutDevice(r.Context(), userID, req.DeviceID); err != nil {
+		response.Error(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, response.MessageResponse{Message: "Device logged out successfully"})
 }
