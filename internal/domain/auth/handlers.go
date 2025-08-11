@@ -212,3 +212,18 @@ func (h *Handler) LogoutDevice(w http.ResponseWriter, r *http.Request) {
 
 	response.JSON(w, http.StatusOK, response.MessageResponse{Message: "Device logged out successfully"})
 }
+
+func (h *Handler) LogoutAllDevices(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authMiddleware.GetUserID(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, ErrInvalidToken)
+		return
+	}
+
+	if err := h.service.LogoutAllDevices(r.Context(), userID); err != nil {
+		response.Error(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, response.MessageResponse{Message: "Logged out from all devices successfully"})
+}
