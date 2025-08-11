@@ -81,7 +81,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	// Get refresh token from cookie
 	cookie, err := r.Cookie("refresh_token")
+	if err == nil {
+		h.logger.Info("Refresh token found", "token", cookie.Value)
+	}
 	if err != nil {
+		h.logger.Info("Failed to get refresh token from cookie", "error", err)
 		response.Error(w, http.StatusUnauthorized, ErrRefreshTokenNotFound)
 		return
 	}

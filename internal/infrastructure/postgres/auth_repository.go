@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/purushothdl/gochat-backend/internal/domain/auth"
 )
@@ -37,7 +38,7 @@ func (r *AuthRepository) CreateRefreshToken(ctx context.Context, token *auth.Ref
 
 func (r *AuthRepository) GetRefreshToken(ctx context.Context, tokenHash string) (*auth.RefreshToken, error) {
 	query := `
-        SELECT id, user_id, token_hash, device_info, ip_address, user_agent,
+        SELECT id, user_id, token_hash, device_info, ip_address::text, user_agent,
                expires_at, created_at, last_used_at
         FROM refresh_tokens 
         WHERE token_hash = $1 AND expires_at > NOW()
@@ -198,4 +199,33 @@ func (r *AuthRepository) DeleteRefreshTokenByID(ctx context.Context, tokenID str
 	}
 
 	return nil
+}
+
+func (r *AuthRepository) GetActiveRefreshTokenByUserIDAndDeviceInfo(ctx context.Context, userID, deviceInfo string) (*auth.RefreshToken, error) {
+	query := `
+        SELECT id, user_id, token_hash, device_info, 
+               ip_address::text, user_agent,
+               expires_at, created_at, last_used_at
+        FROM refresh_tokens 
+        WHERE user_id = $1 AND device_info = $2 AND expires_at > NOW()
+        ORDER BY created_at DESC
+        LIMIT 1
+    `
+
+	var token auth.RefreshToken
+	err := r.pool.QueryRow(ctx, query, userID, deviceInfo).Scan(
+		&token.ID, &token.UserID, &token.TokenHash, &token.DeviceInfo,
+		&token.IPAddress, &token.UserAgent, &token.ExpiresAt,
+		&token.CreatedAt, &token.LastUsedAt,
+	)
+
+	if err != nil {
+		// If no rows are found, it's not an error but a nil token
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get active refresh token by user ID and device info: %w", err)
+	}
+
+	return &token, nil
 }

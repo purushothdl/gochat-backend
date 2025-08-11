@@ -18,6 +18,7 @@ type Repository interface {
     
     // User token management
     GetUserRefreshTokens(ctx context.Context, userID string) ([]*RefreshToken, error)
+    GetActiveRefreshTokenByUserIDAndDeviceInfo(ctx context.Context, userID, deviceInfo string) (*RefreshToken, error)
     DeleteOldestUserToken(ctx context.Context, userID string) error
     CountUserTokens(ctx context.Context, userID string) (int, error)
 }

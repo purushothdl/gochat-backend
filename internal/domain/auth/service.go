@@ -103,28 +103,31 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest, w http.Resp
 }
 
 func (s *Service) RefreshAccessToken(ctx context.Context, refreshTokenString, deviceInfo, ipAddress, userAgent string) (*RefreshTokenResponse, error) {
+	s.logger.Info("Starting token refresh process", "refreshToken", refreshTokenString[:8]+"...")
+
 	tokenHash := auth.HashRefreshToken(refreshTokenString)
+	s.logger.Debug("Generated token hash", "tokenHash", tokenHash[:8]+"...")
 
 	refreshToken, err := s.authRepo.GetRefreshToken(ctx, tokenHash)
 	if err != nil {
+		s.logger.Error("Refresh token not found", "error", err)
 		return nil, ErrRefreshTokenNotFound
 	}
-
-	// Check if token is expired
-	if refreshToken.ExpiresAt.Before(time.Now()) {
-		s.authRepo.DeleteRefreshToken(ctx, tokenHash)
-		return nil, ErrTokenExpired
-	}
+	s.logger.Info("Found refresh token", "tokenID", refreshToken.ID, "userID", refreshToken.UserID)
 
 	// Get user info to include email in JWT
 	user, err := s.userRepo.GetByIDShared(ctx, refreshToken.UserID)
 	if err != nil {
+		s.logger.Error("Failed to get user", "userID", refreshToken.UserID, "error", err)
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
+	s.logger.Info("Retrieved user info", "userID", user.ID, "email", user.Email)
 
 	// Update token usage
 	if err := s.authRepo.UpdateRefreshTokenUsage(ctx, tokenHash); err != nil {
-		// Log error but continue
+		s.logger.Warn("Failed to update refresh token usage", "tokenHash", tokenHash[:8]+"...", "error", err)
+	} else {
+		s.logger.Info("Successfully updated refresh token usage", "tokenHash", tokenHash[:8]+"...")
 	}
 
 	// Generate new access token with user email
@@ -135,8 +138,10 @@ func (s *Service) RefreshAccessToken(ctx context.Context, refreshTokenString, de
 		s.config.JWT.AccessTokenExpiry,
 	)
 	if err != nil {
+		s.logger.Error("Failed to generate access token", "userID", user.ID, "error", err)
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
+	s.logger.Info("Successfully generated new access token", "userID", user.ID)
 
 	return &RefreshTokenResponse{
 		AccessToken: accessToken,
@@ -311,7 +316,19 @@ func (s *Service) generateAuthResponse(ctx context.Context, user *types.User, w 
 		return nil, err
 	}
 
-	// Enforce device limit
+	existingToken, err := s.authRepo.GetActiveRefreshTokenByUserIDAndDeviceInfo(ctx, user.ID, deviceInfo)
+	if err != nil {
+		s.logger.Error("Failed to check for existing refresh token for device", "userID", user.ID, "deviceInfo", deviceInfo, "error", err)
+		return nil, err
+	}
+
+	if existingToken != nil {
+		s.logger.Info("Deleting existing refresh token for device", "tokenID", existingToken.ID, "userID", user.ID, "deviceInfo", deviceInfo)
+		if err := s.authRepo.DeleteRefreshTokenByID(ctx, existingToken.ID); err != nil {
+			s.logger.Warn("Failed to delete existing refresh token for device", "tokenID", existingToken.ID, "error", err)
+		}
+	}
+
 	s.enforceDeviceLimit(ctx, user.ID)
 
 	// Create refresh token record
@@ -362,8 +379,6 @@ func (s *Service) setAuthCookies(w http.ResponseWriter, accessToken, refreshToke
 	// For non-production environments, use SameSiteLaxMode for broader compatibility
 	if s.config.Server.Env != "production" {
 		accessCookie.SameSite = http.SameSiteLaxMode
-		// For cross-port communication on localhost, explicitly set the domain
-		accessCookie.Domain = "localhost"
 	}
 	http.SetCookie(w, accessCookie)
 
@@ -371,7 +386,7 @@ func (s *Service) setAuthCookies(w http.ResponseWriter, accessToken, refreshToke
 	refreshCookie := &http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
-		Path:     "/",
+		Path:     "/api",
 		Expires:  time.Now().Add(s.config.JWT.RefreshTokenExpiry),
 		HttpOnly: true,
 		Secure:   s.config.Server.Env == "production",
@@ -380,7 +395,6 @@ func (s *Service) setAuthCookies(w http.ResponseWriter, accessToken, refreshToke
 
 	if s.config.Server.Env != "production" {
 		refreshCookie.SameSite = http.SameSiteLaxMode
-		refreshCookie.Domain = "localhost"
 	}
 	http.SetCookie(w, refreshCookie)
 }
