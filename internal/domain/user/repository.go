@@ -13,6 +13,7 @@ type Repository interface {
     GetByEmail(ctx context.Context, email string) (*User, error)
     Update(ctx context.Context, user *User) error
     Delete(ctx context.Context, id string) error
+    UpdateUserImageURL(ctx context.Context, userID string, imageURL string) error
 
     // User Block Methods
 	BlockUser(ctx context.Context, blockerID, blockedID string) error

@@ -25,7 +25,14 @@ type Router struct {
 	authMw         *app_middleware.AuthMiddleware
 }
 
-func NewRouter(authHandler *auth.Handler, userHandler *user.Handler, healthHandler *health.Handler, roomHandler *room.Handler, messageHandler *message.Handler, authMw *app_middleware.AuthMiddleware) *Router {
+func NewRouter(
+	authHandler *auth.Handler,
+	userHandler *user.Handler,
+	healthHandler *health.Handler,
+	roomHandler *room.Handler,
+	messageHandler *message.Handler,
+	authMw *app_middleware.AuthMiddleware,
+) *Router {
 	return &Router{
 		authHandler:    authHandler,
 		userHandler:    userHandler,
@@ -78,6 +85,9 @@ func (rt *Router) SetupRoutes(cfg *config.Config, logger *slog.Logger) *chi.Mux 
 			r.Put("/settings", rt.userHandler.UpdateSettings) // Update user settings
 			r.Put("/password", rt.userHandler.ChangePassword) // Change user password
 
+			// The route for profile image uploads.
+			r.Put("/profile/image", rt.userHandler.UpdateProfileImage)
+
 			// User blocking features
 			r.Post("/block", rt.userHandler.BlockUser)               // Block a user
 			r.Delete("/block/{user_id}", rt.userHandler.UnblockUser) // Unblock a user
@@ -124,6 +134,7 @@ func (rt *Router) SetupRoutes(cfg *config.Config, logger *slog.Logger) *chi.Mux 
 			// Message read receipt operations
 			r.Post("/bulk_seen", rt.messageHandler.MarkMessagesSeen) // Mark multiple messages as seen
 		})
+
 	})
 
 	// Serve static files from the 'tests' directory for local development

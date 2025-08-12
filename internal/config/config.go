@@ -15,6 +15,9 @@ type Config struct {
 	Security SecurityConfig
 	CORS     CORSConfig
 	Resend   ResendConfig
+	AWS      AWSConfig
+	Redis    RedisConfig
+	Upload   UploadConfig
 }
 
 // AppConfig holds general application settings.
@@ -68,6 +71,30 @@ type ResendConfig struct {
 	FromName  string
 }
 
+type AWSConfig struct {
+	Region          string
+	AccessKeyID     string
+	SecretAccessKey string
+	S3Bucket        string
+	S3Region        string
+}
+
+type RedisConfig struct {
+	URL      string
+	Host     string
+	Port     string
+	Password string
+	DB       int
+}
+
+type UploadConfig struct {
+	MaxFileSize      int64
+	AllowedTypes     []string
+	ProfileImagePath string
+	StagingPath      string
+	QueueName        string
+}
+
 func Load() (*Config, error) {
 	return &Config{
 		App: AppConfig{
@@ -118,6 +145,30 @@ func Load() (*Config, error) {
 			APIKey:    getEnv("RESEND_API_KEY", ""),
 			FromEmail: getEnv("RESEND_FROM_EMAIL", "onboarding@resend.dev"),
 			FromName:  getEnv("RESEND_FROM_NAME", "GoChat"),
+		},
+
+		AWS: AWSConfig{
+			Region:          getEnv("AWS_REGION", "us-east-1"),
+			AccessKeyID:     getEnv("AWS_ACCESS_KEY_ID", ""),
+			SecretAccessKey: getEnv("AWS_SECRET_ACCESS_KEY", ""),
+			S3Bucket:        getEnv("AWS_S3_BUCKET", ""),
+			S3Region:        getEnv("AWS_S3_REGION", "us-east-1"),
+		},
+
+		Redis: RedisConfig{
+			URL:      getEnv("REDIS_URL", ""),
+			Host:     getEnv("REDIS_HOST", "localhost"),
+			Port:     getEnv("REDIS_PORT", "6379"),
+			Password: getEnv("REDIS_PASSWORD", ""),
+			DB:       parseInt("REDIS_DB", 0),
+		},
+
+		Upload: UploadConfig{
+			MaxFileSize:      int64(parseInt("UPLOAD_MAX_FILE_SIZE", 5*1024*1024)), // 5MB default
+			AllowedTypes:     strings.Split(getEnv("UPLOAD_ALLOWED_TYPES", "image/jpeg,image/png,image/webp"), ","),
+			ProfileImagePath: getEnv("UPLOAD_PROFILE_PATH", "profiles"),
+			StagingPath:      getEnv("UPLOAD_STAGING_PATH", "staging"),
+			QueueName:        getEnv("UPLOAD_QUEUE_NAME", "profile_upload_queue"),
 		},
 	}, nil
 

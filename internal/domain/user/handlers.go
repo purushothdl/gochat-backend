@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/purushothdl/gochat-backend/internal/config"
 	"github.com/purushothdl/gochat-backend/internal/shared/response"
 	"github.com/purushothdl/gochat-backend/internal/shared/validator"
 	authMiddleware "github.com/purushothdl/gochat-backend/internal/transport/http/middleware"
@@ -13,16 +14,26 @@ import (
 )
 
 type Handler struct {
-	service   *Service
-	logger    *slog.Logger
-	validator *validator.Validator
+	service       *Service
+	logger        *slog.Logger
+	validator     *validator.Validator
+	imageUploader ProfileImageUploader
+	config        *config.Config
 }
 
-func NewHandler(service *Service, logger *slog.Logger, validator *validator.Validator) *Handler {
+func NewHandler(
+	service       *Service, 
+	logger        *slog.Logger, 
+	validator     *validator.Validator,
+	config        *config.Config,
+	imageUploader ProfileImageUploader,
+) *Handler {
 	return &Handler{
-		service:   service,
-		logger:    logger,
-		validator: validator,
+		service:       service,
+		logger:        logger,
+		validator:     validator,
+		config:        config,
+		imageUploader: imageUploader,
 	}
 }
 
@@ -184,4 +195,34 @@ func (h *Handler) ListBlockedUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, blockedUsers)
+}
+
+func (h *Handler) UpdateProfileImage(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authMiddleware.GetUserID(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, errors.ErrUnauthorized)
+		return
+	}
+
+	// Ensure the config limit in ParseMultipartForm matches the business logic.
+	if err := r.ParseMultipartForm(h.config.Upload.MaxFileSize); err != nil {
+		response.Error(w, http.StatusBadRequest, errors.New("INVALID_FORM", err.Error(), http.StatusBadRequest))
+		return
+	}
+
+	file, header, err := r.FormFile("image")
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, errors.New("MISSING_FILE", "Image file is required.", http.StatusBadRequest))
+		return
+	}
+	defer file.Close()
+
+	job, err := h.imageUploader.InitiateProfileImageUpload(r.Context(), userID, file, header)
+	if err != nil {
+		h.logger.Error("failed to initiate profile image upload", "error", err, "user_id", userID)
+		response.Error(w, http.StatusBadRequest, errors.New("UPLOAD_FAILED", err.Error(), http.StatusBadRequest))
+		return
+	}
+
+	response.JSON(w, http.StatusAccepted, job)
 }

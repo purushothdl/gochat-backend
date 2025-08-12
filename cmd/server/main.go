@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -56,6 +57,10 @@ func run(logger *slog.Logger) error {
 		c.AuthMiddleware,
 	)
 	handler := router.SetupRoutes(cfg, logger)
+
+	// Start the upload worker in a separate goroutine
+	ctx := context.Background()
+	go c.UploadWorker.Start(ctx)
 
 	// Create and run the server, which handles its own lifecycle.
 	srv := httpTransport.NewServer(cfg, logger, handler)

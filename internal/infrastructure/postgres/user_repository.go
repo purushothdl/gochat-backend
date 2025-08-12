@@ -239,6 +239,21 @@ func (r *UserRepository) ListBlockedUsers(ctx context.Context, blockerID string)
 	return users, nil
 }
 
+
+func (r *UserRepository) UpdateUserImageURL(ctx context.Context, userID string, imageURL string) error {
+	query := `UPDATE users SET image_url = $1, updated_at = NOW() WHERE id = $2`
+	
+	cmdTag, err := r.pool.Exec(ctx, query, imageURL, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update user image_url: %w", err)
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return fmt.Errorf("user not found for image_url update")
+	}
+
+	return nil
+}
+
 // IsBlocked checks if a communication block exists between two users, in either direction.
 func (r *UserRepository) IsBlocked(ctx context.Context, userID1, userID2 string) (bool, error) {
 	query := `
