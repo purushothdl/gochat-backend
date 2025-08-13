@@ -1,7 +1,7 @@
-// internal/websocket/handler.go
 package websocket
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
@@ -14,60 +14,70 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		// This should be configured properly for production.
-		return true
+		return true // TODO: Configure properly for production.
 	},
 }
 
-// ServeWs handles websocket requests from the peer.
-func ServeWs(hub *Hub, cfg *config.Config, logger *slog.Logger, w http.ResponseWriter, r *http.Request) {
-	var accessToken string
+// Handler holds dependencies for serving WebSocket connections.
+type Handler struct {
+	hub    *Hub
+	config *config.Config
+	logger *slog.Logger
+}
 
-	// 1. Try to get the token from the cookie first (for browsers).
-	cookie, err := r.Cookie("access_token")
-	if err == nil {
-		accessToken = cookie.Value
+func NewHandler(hub *Hub, cfg *config.Config, logger *slog.Logger) *Handler {
+	return &Handler{
+		hub:    hub,
+		config: cfg,
+		logger: logger,
 	}
+}
 
-	// 2. If no cookie, fall back to checking the query parameter (for non-browser clients).
+// ServeWs handles the entire lifecycle of a WebSocket connection.
+func (h *Handler) ServeWs(w http.ResponseWriter, r *http.Request) {
+	accessToken := h.getAccessToken(r)
 	if accessToken == "" {
-		accessToken = r.URL.Query().Get("token")
-	}
-
-	// 3. If still no token, fail the connection.
-	if accessToken == "" {
-		logger.Error("websocket auth failed: no token provided in cookie or query param")
 		http.Error(w, "Unauthorized: Missing token", http.StatusUnauthorized)
 		return
 	}
 
-	// 4. Validate the token.
-	claims, err := auth.ValidateAccessToken(accessToken, cfg.JWT.Secret)
+	claims, err := auth.ValidateAccessToken(accessToken, h.config.JWT.Secret)
 	if err != nil {
-		logger.Error("websocket auth failed: invalid token", "error", err)
+		h.logger.Error("websocket auth failed: invalid token", "error", err)
 		http.Error(w, "Unauthorized: Invalid token", http.StatusUnauthorized)
 		return
 	}
-	userID := claims.UserID
 
-	// 5. Upgrade the HTTP connection to a WebSocket connection.
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		logger.Error("failed to upgrade connection", "error", err)
+		h.logger.Error("failed to upgrade connection", "error", err, "user_id", claims.UserID)
 		return
 	}
 
-	// 6. Create and register the new client.
+	ctx, cancel := context.WithCancel(context.Background())
 	client := &Client{
-		hub:    hub,
+		hub:    h.hub,
 		conn:   conn,
 		send:   make(chan []byte, 256),
-		userID: userID,
-		logger: logger.With("user_id", userID),
+		userID: claims.UserID,
+		logger: h.logger.With("user_id", claims.UserID),
 		rooms:  make(map[string]bool),
+		ctx:    ctx,
+		cancel: cancel,
 	}
-	client.hub.register <- client
 
+	// Register the client with the hub and start its pumps.
+	h.hub.register <- client
 	go client.writePump()
 	go client.readPump()
+}
+
+func (h *Handler) getAccessToken(r *http.Request) string {
+	if cookie, err := r.Cookie("access_token"); err == nil {
+		return cookie.Value
+	}
+	if token := r.URL.Query().Get("token"); token != "" {
+		return token
+	}
+	return ""
 }

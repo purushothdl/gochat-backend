@@ -37,6 +37,7 @@ type Container struct {
 
 	// Infrastructure Providers (implementing contracts)
 	QueueProvider   contracts.Queue
+	PubSubProvider  contracts.PubSub 
 	StorageProvider contracts.FileStorage
 	EmailService    *email.ResendService
 	ImageProcessor  *imageproc.Processor
@@ -91,6 +92,10 @@ func (c *Container) Build() error {
 	if err != nil {
 		return fmt.Errorf("failed to create queue provider: %w", err)
 	}
+	c.PubSubProvider, err = redis.NewPubSubProvider(&c.Config.Redis)
+	if err != nil {
+		return fmt.Errorf("failed to create pubsub provider: %w", err)
+	}
 	c.EmailService = email.NewResendService(&c.Config.Resend)
 	c.ImageProcessor = imageproc.NewProcessor(c.Config.Upload.AllowedTypes)
 
@@ -105,7 +110,7 @@ func (c *Container) Build() error {
 	c.UploadService = upload.NewService(c.StorageProvider, c.QueueProvider, c.ImageProcessor, c.Config, c.Logger)
 
 	// Build Workers
-	c.UploadWorker = upload.NewWorker(c.QueueProvider, c.StorageProvider, c.UserRepo, c.ImageProcessor, c.Config, c.Logger)
+	c.UploadWorker = upload.NewWorker(c.QueueProvider, c.StorageProvider, c.UserRepo, c.ImageProcessor, c.Config, c.Logger, c.PubSubProvider)
 
 	// Build Handlers
 	c.AuthHandler = auth.NewHandler(c.AuthService, c.Logger, c.Validator)

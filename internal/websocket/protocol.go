@@ -7,6 +7,7 @@ type EventType string
 const (
 	EventSubscribe EventType = "SUBSCRIBE"
 	EventUnsubscribe EventType = "UNSUBSCRIBE"
+	EventProfileUpdated EventType = "PROFILE_UPDATED"
 
 	// TODO: Add other events like USER_TYPING, MESSAGE_READ etc.
 )
@@ -19,10 +20,15 @@ type Event struct {
 
 // SubscribePayload is the specific payload for a SUBSCRIBE event.
 type SubscribePayload struct {
-	RoomIDs []string `json:"room_ids"`
+	Channels []string `json:"channels"` 
 }
 
 // UnsubscribePayload is the specific payload for an UNSUBSCRIBE event.
 type UnsubscribePayload struct {
 	RoomIDs []string `json:"room_ids"`
+}
+
+// ProfileUpdatedPayload is the payload for the PROFILE_UPDATED event.
+type ProfileUpdatedPayload struct {
+	NewImageURL string `json:"new_image_url"`
 }

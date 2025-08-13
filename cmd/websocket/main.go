@@ -2,6 +2,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -29,29 +30,33 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	// Create the Redis Presence Manager.
+	pubsubProvider, err := redis.NewPubSubProvider(&cfg.Redis)
+	if err != nil {
+		logger.Error("failed to create pubsub provider", "error", err)
+		os.Exit(1)
+	}
 	presenceManager, err := redis.NewPresenceManager(&cfg.Redis)
 	if err != nil {
 		log.Fatalf("Failed to create presence manager: %v", err)
 	}
 
 	// Create and start WebSocket hub
-	hub := websocket.NewHub(logger, presenceManager)
+	hub := websocket.NewHub(logger, pubsubProvider, presenceManager)
 	go hub.Run()
 
-	// Register WebSocket endpoint handler
-	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		websocket.ServeWs(hub, cfg, logger, w, r)
-	})
+	// The Handler now has fewer dependencies.
+	wsHandler := websocket.NewHandler(hub, cfg, logger)
+
+	http.HandleFunc("/ws", wsHandler.ServeWs)
 
 	wsPort := os.Getenv("WEBSOCKET_PORT")
 	if wsPort == "" {
 		wsPort = "8081"
 	}
 
-	// Start WebSocket server
-	logger.Info("websocket server starting", "port", wsPort)
-	err = http.ListenAndServe(":"+wsPort, nil)
-	if err != nil {
-		log.Fatalf("Failed to start websocket server: %v", err)
+	logger.Info(fmt.Sprintf("websocket server starting on port %s", wsPort))
+	if err := http.ListenAndServe(":"+wsPort, nil); err != nil {
+		logger.Error("failed to start websocket server", "error", err)
+		os.Exit(1)
 	}
 }

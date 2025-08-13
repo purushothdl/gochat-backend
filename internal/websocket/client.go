@@ -1,7 +1,7 @@
-// internal/websocket/client.go
 package websocket
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"time"
@@ -24,9 +24,11 @@ type Client struct {
 	userID string
 	logger *slog.Logger
 	rooms  map[string]bool
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
-// readPump pumps messages from the websocket connection to the hub for processing.
+// readPump parses messages from the client and sends them to the hub.
 func (c *Client) readPump() {
 	defer func() {
 		c.hub.unregister <- c
@@ -51,7 +53,6 @@ func (c *Client) readPump() {
 	}
 }
 
-// handleNewMessage parses incoming messages and routes them to the hub.
 func (c *Client) handleNewMessage(message []byte) {
 	var event Event
 	if err := json.Unmarshal(message, &event); err != nil {
@@ -59,22 +60,17 @@ func (c *Client) handleNewMessage(message []byte) {
 		return
 	}
 
-	switch event.Type {
-	case EventSubscribe:
+	if event.Type == EventSubscribe {
 		var payload SubscribePayload
 		if err := json.Unmarshal(event.Payload, &payload); err != nil {
 			c.logger.Error("failed to unmarshal subscribe payload", "error", err)
 			return
 		}
+		// Pass the new payload structure to the hub.
 		c.hub.subscribe <- &SubscriptionRequest{
-			Client:  c,
-			RoomIDs: payload.RoomIDs,
+			Client:       c,
+			ChannelNames: payload.Channels,
 		}
-
-	// TODO: Add cases for other events like "USER_TYPING"
-
-	default:
-		c.logger.Warn("unknown event type received", "type", event.Type)
 	}
 }
 
@@ -90,7 +86,6 @@ func (c *Client) writePump() {
 		case message, ok := <-c.send:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
-				// The hub closed the channel.
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
@@ -100,6 +95,9 @@ func (c *Client) writePump() {
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
+		case <-c.ctx.Done():
+			// The context was canceled, indicating the client is being cleaned up.
+			return
 		}
 	}
 }
