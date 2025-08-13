@@ -6,15 +6,23 @@ import (
 	"image"
 	"image/jpeg"
 
-	"github.com/gen2brain/webp"
 	"github.com/disintegration/imaging"
+	"github.com/gen2brain/webp"
 	"github.com/h2non/filetype"
 )
 
-type Processor struct{}
+type Processor struct {
+	allowedTypes map[string]bool
+}
 
-func NewProcessor() *Processor {
-	return &Processor{}
+func NewProcessor(allowedTypes []string) *Processor {
+	allowedTypesMap := make(map[string]bool)
+	for _, t := range allowedTypes {
+		allowedTypesMap[t] = true
+	}
+	return &Processor{
+		allowedTypes: allowedTypesMap,
+	}
 }
 
 type ProcessedImage struct {
@@ -34,13 +42,7 @@ func (p *Processor) ValidateImage(data []byte) error {
 		return fmt.Errorf("failed to detect file type: %w", err)
 	}
 
-	allowedTypes := map[string]bool{
-		"image/jpeg": true,
-		"image/png":  true,
-		"image/webp": true,
-	}
-
-	if !allowedTypes[kind.MIME.Value] {
+	if !p.allowedTypes[kind.MIME.Value] {
 		return fmt.Errorf("unsupported image type: %s", kind.MIME.Value)
 	}
 
@@ -49,33 +51,33 @@ func (p *Processor) ValidateImage(data []byte) error {
 
 // ProcessProfileImage resizes an image and converts it to WebP format.
 func (p *Processor) ProcessProfileImage(data []byte) (*ProcessedImage, error) {
-    if err := p.ValidateImage(data); err != nil {
-        return nil, err
-    }
+	if err := p.ValidateImage(data); err != nil {
+		return nil, err
+	}
 
-    img, _, err := image.Decode(bytes.NewReader(data))
-    if err != nil {
-        return nil, fmt.Errorf("failed to decode image: %w", err)
-    }
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image: %w", err)
+	}
 
-    resized := imaging.Fill(img, 400, 400, imaging.Center, imaging.Lanczos)
+	resized := imaging.Fill(img, 400, 400, imaging.Center, imaging.Lanczos)
 
-    var buf bytes.Buffer
-    options := webp.Options{
-        Lossless: false,
-        Quality:  85,
-    }
-    
-    if err := webp.Encode(&buf, resized, options); err != nil {
-        return nil, fmt.Errorf("failed to encode image to webp: %w", err)
-    }
+	var buf bytes.Buffer
+	options := webp.Options{
+		Lossless: false,
+		Quality:  85,
+	}
 
-    return &ProcessedImage{
-        Data:        buf.Bytes(),
-        ContentType: "image/webp",
-        Width:       400,
-        Height:      400,
-    }, nil
+	if err := webp.Encode(&buf, resized, options); err != nil {
+		return nil, fmt.Errorf("failed to encode image to webp: %w", err)
+	}
+
+	return &ProcessedImage{
+		Data:        buf.Bytes(),
+		ContentType: "image/webp",
+		Width:       400,
+		Height:      400,
+	}, nil
 }
 
 func (p *Processor) CreateThumbnail(data []byte, size int) (*ProcessedImage, error) {

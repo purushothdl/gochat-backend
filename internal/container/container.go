@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/purushothdl/gochat-backend/internal/config"
-	"github.com/purushothdl/gochat-backend/internal/contracts" 
+	"github.com/purushothdl/gochat-backend/internal/contracts"
 	"github.com/purushothdl/gochat-backend/internal/domain/auth"
 	"github.com/purushothdl/gochat-backend/internal/domain/health"
 	"github.com/purushothdl/gochat-backend/internal/domain/message"
@@ -34,7 +34,7 @@ type Container struct {
 	PasswordResetRepo *postgres.PasswordResetRepository
 	RoomRepo          *postgres.RoomRepository
 	MessageRepo       *postgres.MessageRepository
-	
+
 	// Infrastructure Providers (implementing contracts)
 	QueueProvider   contracts.Queue
 	StorageProvider contracts.FileStorage
@@ -92,7 +92,7 @@ func (c *Container) Build() error {
 		return fmt.Errorf("failed to create queue provider: %w", err)
 	}
 	c.EmailService = email.NewResendService(&c.Config.Resend)
-	c.ImageProcessor = imageproc.NewProcessor()
+	c.ImageProcessor = imageproc.NewProcessor(c.Config.Upload.AllowedTypes)
 
 	// Build Domain Services
 	c.AuthService = auth.NewService(c.AuthRepo, c.UserRepo, c.PasswordResetRepo, c.EmailService, c.Config, c.Logger)
@@ -100,7 +100,7 @@ func (c *Container) Build() error {
 	c.HealthService = health.NewService(c.DB, c.Logger)
 	c.RoomService = room.NewService(c.RoomRepo, c.UserRepo, c.Config, c.Logger)
 	c.MessageService = message.NewService(c.MessageRepo, c.RoomRepo, c.UserRepo, nil, c.Config, c.Logger)
-	
+
 	// The upload.Service fulfills the user.ProfileImageUploader interface implicitly.
 	c.UploadService = upload.NewService(c.StorageProvider, c.QueueProvider, c.ImageProcessor, c.Config, c.Logger)
 
@@ -109,7 +109,7 @@ func (c *Container) Build() error {
 
 	// Build Handlers
 	c.AuthHandler = auth.NewHandler(c.AuthService, c.Logger, c.Validator)
-	c.UserHandler = user.NewHandler(c.UserService, c.Logger, c.Validator, c.Config, c.UploadService) 
+	c.UserHandler = user.NewHandler(c.UserService, c.Logger, c.Validator, c.Config, c.UploadService)
 	c.HealthHandler = health.NewHandler(c.HealthService, c.Logger)
 	c.RoomHandler = room.NewHandler(c.RoomService, c.Logger, c.Validator)
 	c.MessageHandler = message.NewHandler(c.MessageService, c.Logger, c.Validator)

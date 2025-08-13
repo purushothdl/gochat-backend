@@ -9,6 +9,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/purushothdl/gochat-backend/internal/config"
+	"github.com/purushothdl/gochat-backend/internal/infrastructure/redis"
 	"github.com/purushothdl/gochat-backend/internal/websocket"
 )
 
@@ -27,8 +28,14 @@ func main() {
 	// Initialize structured JSON logger
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
+	// Create the Redis Presence Manager.
+	presenceManager, err := redis.NewPresenceManager(&cfg.Redis)
+	if err != nil {
+		log.Fatalf("Failed to create presence manager: %v", err)
+	}
+
 	// Create and start WebSocket hub
-	hub := websocket.NewHub(logger)
+	hub := websocket.NewHub(logger, presenceManager)
 	go hub.Run()
 
 	// Register WebSocket endpoint handler

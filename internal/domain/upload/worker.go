@@ -79,7 +79,6 @@ func (w *Worker) processNextJob(ctx context.Context) {
 
 	if err != nil {
 		logger.Error("failed to process upload", "error", err)
-		// Optionally, you could update the user's table with a processing error status.
 		return
 	}
 

@@ -21,45 +21,53 @@ var upgrader = websocket.Upgrader{
 
 // ServeWs handles websocket requests from the peer.
 func ServeWs(hub *Hub, cfg *config.Config, logger *slog.Logger, w http.ResponseWriter, r *http.Request) {
-	logger.Info("Incoming WebSocket request headers", "headers", r.Header)
+	var accessToken string
 
-	// 1. Authenticate the user from the access_token cookie.
+	// 1. Try to get the token from the cookie first (for browsers).
 	cookie, err := r.Cookie("access_token")
-	if err != nil {
-		logger.Error("Failed to get access_token cookie", "error", err) 
-		http.Error(w, "Unauthorized: No access token", http.StatusUnauthorized)
+	if err == nil {
+		accessToken = cookie.Value
+	}
+
+	// 2. If no cookie, fall back to checking the query parameter (for non-browser clients).
+	if accessToken == "" {
+		accessToken = r.URL.Query().Get("token")
+	}
+
+	// 3. If still no token, fail the connection.
+	if accessToken == "" {
+		logger.Error("websocket auth failed: no token provided in cookie or query param")
+		http.Error(w, "Unauthorized: Missing token", http.StatusUnauthorized)
 		return
 	}
-	accessToken := cookie.Value
-	logger.Info("Access token cookie found", "token_present", len(accessToken) > 0) 
 
+	// 4. Validate the token.
 	claims, err := auth.ValidateAccessToken(accessToken, cfg.JWT.Secret)
 	if err != nil {
-		logger.Error("Failed to validate access token", "error", err) 
-		http.Error(w, "Unauthorized: Invalid access token", http.StatusUnauthorized)
+		logger.Error("websocket auth failed: invalid token", "error", err)
+		http.Error(w, "Unauthorized: Invalid token", http.StatusUnauthorized)
 		return
 	}
 	userID := claims.UserID
-	logger.Info("User authenticated via WebSocket", "user_id", userID) 
 
-	// 2. Upgrade the HTTP connection to a WebSocket connection.
+	// 5. Upgrade the HTTP connection to a WebSocket connection.
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		logger.Error("failed to upgrade connection", "error", err)
 		return
 	}
 
-	// 3. Create and register the new client.
+	// 6. Create and register the new client.
 	client := &Client{
 		hub:    hub,
 		conn:   conn,
 		send:   make(chan []byte, 256),
 		userID: userID,
-		logger: logger,
+		logger: logger.With("user_id", userID),
+		rooms:  make(map[string]bool),
 	}
 	client.hub.register <- client
 
-	// 4. Start the read and write pumps in separate goroutines.
 	go client.writePump()
 	go client.readPump()
 }
