@@ -81,9 +81,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	// Get refresh token from cookie
 	cookie, err := r.Cookie("refresh_token")
-	if err == nil {
-		h.logger.Info("Refresh token found", "token", cookie.Value)
-	}
+
 	if err != nil {
 		h.logger.Info("Failed to get refresh token from cookie", "error", err)
 		response.Error(w, http.StatusUnauthorized, ErrRefreshTokenNotFound)
@@ -209,6 +207,19 @@ func (h *Handler) LogoutDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get the current device ID from the context
+	currentDeviceID, ok := authMiddleware.GetDeviceID(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, ErrInvalidToken)
+		return
+	}
+
+	// If the user is revoking the current session, raise an error
+	if req.DeviceID == currentDeviceID {
+		response.ErrorJSON(w, http.StatusForbidden, "Please log out to delete the current session.")
+		return
+	}
+
 	if err := h.service.LogoutDevice(r.Context(), userID, req.DeviceID); err != nil {
 		response.Error(w, http.StatusInternalServerError, err)
 		return
@@ -223,6 +234,9 @@ func (h *Handler) LogoutAllDevices(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusUnauthorized, ErrInvalidToken)
 		return
 	}
+
+	// Clear auth cookies
+	h.service.clearAuthCookies(w)
 
 	if err := h.service.LogoutAllDevices(r.Context(), userID); err != nil {
 		response.Error(w, http.StatusInternalServerError, err)

@@ -136,6 +136,7 @@ func (s *Service) RefreshAccessToken(ctx context.Context, refreshTokenString, de
 		user.Email,
 		s.config.JWT.Secret,
 		s.config.JWT.AccessTokenExpiry,
+		refreshToken.ID,
 	)
 	if err != nil {
 		s.logger.Error("Failed to generate access token", "userID", user.ID, "error", err)
@@ -300,11 +301,12 @@ func (s *Service) LogoutDevice(ctx context.Context, userID, deviceID string) err
 // ============================================================================
 
 func (s *Service) generateAuthResponse(ctx context.Context, user *types.User, w http.ResponseWriter, deviceInfo, ipAddress, userAgent string) (*AuthenticationResponse, error) {
-	// Generate access token
-	s.logger.Info("Generating access token", "userID", user.ID, "email", user.Email)
+	// Generate a unique device ID
+	deviceID := uuid.New().String()
 
+	// Generate access token with deviceID
 	accessToken, err := auth.GenerateAccessToken(
-		user.ID, user.Email, s.config.JWT.Secret, s.config.JWT.AccessTokenExpiry,
+		user.ID, user.Email, s.config.JWT.Secret, s.config.JWT.AccessTokenExpiry, deviceID,
 	)
 	if err != nil {
 		return nil, err
@@ -333,7 +335,7 @@ func (s *Service) generateAuthResponse(ctx context.Context, user *types.User, w 
 
 	// Create refresh token record
 	refreshToken := &RefreshToken{
-		ID:         uuid.New().String(),
+		ID:         deviceID,
 		UserID:     user.ID,
 		TokenHash:  auth.HashRefreshToken(refreshTokenString),
 		DeviceInfo: deviceInfo,
@@ -413,7 +415,7 @@ func (s *Service) clearAuthCookies(w http.ResponseWriter) {
 	refreshCookie := &http.Cookie{
 		Name:     "refresh_token",
 		Value:    "",
-		Path:     "/",
+		Path:     "/api",
 		MaxAge:   -1,
 		HttpOnly: true,
 	}

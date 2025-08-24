@@ -20,6 +20,7 @@ var (
 	userIDKey    = &authContextKey{"userID"}
 	userEmailKey = &authContextKey{"userEmail"}
 	userKey      = &authContextKey{"user"}
+	deviceIDKey  = &authContextKey{"deviceID"}
 )
 
 // Required by auth middleware to set the current user
@@ -61,6 +62,7 @@ func (m *AuthMiddleware) RequireAuth(next http.Handler) http.Handler {
 
 		ctx := context.WithValue(r.Context(), userIDKey, claims.UserID)
 		ctx = context.WithValue(ctx, userEmailKey, claims.Email)
+		ctx = context.WithValue(ctx, deviceIDKey, claims.DeviceID)
 
 		// Fetch the full User entity from the repository
 		userEntity, err := m.userRepo.GetByIDShared(ctx, claims.UserID)
@@ -95,7 +97,7 @@ func (m *AuthMiddleware) OptionalAuth(next http.Handler) http.Handler {
 
 					// Fetch the full User entity from the repository
 					userEntity, err := m.userRepo.GetByIDShared(ctx, claims.UserID)
-					if err == nil { 
+					if err == nil {
 						basicUser := &types.BasicUser{
 							ID:       userEntity.ID,
 							Name:     userEntity.Name,
@@ -125,4 +127,9 @@ func GetUserEmail(ctx context.Context) (string, bool) {
 func GetBasicUser(ctx context.Context) (*types.BasicUser, bool) {
 	basicUser, ok := ctx.Value(userKey).(*types.BasicUser)
 	return basicUser, ok
+}
+
+func GetDeviceID(ctx context.Context) (string, bool) {
+	deviceID, ok := ctx.Value(deviceIDKey).(string)
+	return deviceID, ok
 }
