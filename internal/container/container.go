@@ -36,11 +36,12 @@ type Container struct {
 	MessageRepo       *postgres.MessageRepository
 
 	// Infrastructure Providers (implementing contracts)
-	QueueProvider   contracts.Queue
-	PubSubProvider  contracts.PubSub 
-	StorageProvider contracts.FileStorage
-	EmailService    *email.ResendService
-	ImageProcessor  *imageproc.Processor
+	QueueProvider    contracts.Queue
+	PubSubProvider   contracts.PubSub
+	StorageProvider  contracts.FileStorage
+	PresenceProvider contracts.PresenceManager
+	EmailService     *email.ResendService
+	ImageProcessor   *imageproc.Processor
 
 	// Domain Services
 	AuthService    *auth.Service
@@ -96,6 +97,10 @@ func (c *Container) Build() error {
 	if err != nil {
 		return fmt.Errorf("failed to create pubsub provider: %w", err)
 	}
+	c.PresenceProvider, err = redis.NewPresenceManager(&c.Config.Redis)
+	if err != nil {
+		return fmt.Errorf("failed to create presence provider: %w", err)
+	}
 	c.EmailService = email.NewResendService(&c.Config.Resend)
 	c.ImageProcessor = imageproc.NewProcessor(c.Config.Upload.AllowedTypes)
 
@@ -104,7 +109,7 @@ func (c *Container) Build() error {
 	c.UserService = user.NewService(c.UserRepo, c.Config, c.Logger)
 	c.HealthService = health.NewService(c.DB, c.Logger)
 	c.RoomService = room.NewService(c.RoomRepo, c.UserRepo, c.Config, c.Logger)
-	c.MessageService = message.NewService(c.MessageRepo, c.RoomRepo, c.UserRepo, nil, c.Config, c.Logger)
+	c.MessageService = message.NewService(c.MessageRepo, c.RoomRepo, c.UserRepo, c.PresenceProvider, c.PubSubProvider, c.Config, c.Logger)
 
 	// The upload.Service fulfills the user.ProfileImageUploader interface implicitly.
 	c.UploadService = upload.NewService(c.StorageProvider, c.QueueProvider, c.ImageProcessor, c.Config, c.Logger)

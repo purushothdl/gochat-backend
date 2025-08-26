@@ -80,13 +80,11 @@ func (rt *Router) SetupRoutes(cfg *config.Config, logger *slog.Logger) *chi.Mux 
 		r.Route("/user", func(r chi.Router) {
 			r.Use(rt.authMw.RequireAuth)
 
-			r.Get("/profile", rt.userHandler.GetProfile)      // Get user profile
-			r.Put("/profile", rt.userHandler.UpdateProfile)   // Update user profile
-			r.Put("/settings", rt.userHandler.UpdateSettings) // Update user settings
-			r.Put("/password", rt.userHandler.ChangePassword) // Change user password
-
-			// The route for profile image uploads.
-			r.Put("/profile/image", rt.userHandler.UpdateProfileImage)
+			r.Get("/profile", rt.userHandler.GetProfile)               // Get user profile
+			r.Put("/profile", rt.userHandler.UpdateProfile)            // Update user profile
+			r.Put("/settings", rt.userHandler.UpdateSettings)          // Update user settings
+			r.Put("/password", rt.userHandler.ChangePassword)          // Change user password
+			r.Put("/profile/image", rt.userHandler.UpdateProfileImage) // Update profile image
 
 			// User blocking features
 			r.Post("/block", rt.userHandler.BlockUser)               // Block a user

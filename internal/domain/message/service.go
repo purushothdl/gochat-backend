@@ -3,11 +3,13 @@ package message
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/purushothdl/gochat-backend/internal/config"
+	"github.com/purushothdl/gochat-backend/internal/contracts"
 	"github.com/purushothdl/gochat-backend/internal/shared/types"
 	"github.com/purushothdl/gochat-backend/pkg/errors"
 )
@@ -17,24 +19,26 @@ type Service struct {
 	roomProv     RoomProvider
 	userProv     UserProvider
 	presenceProv PresenceProvider
+	pubSub       contracts.PubSub
 	config       *config.Config
 	logger       *slog.Logger
-	// redis publisher will be injected here
 }
 
 func NewService(
-	msgRepo      Repository,
-	roomProv     RoomProvider,
-	userProv     UserProvider,
+	msgRepo Repository,
+	roomProv RoomProvider,
+	userProv UserProvider,
 	presenceProv PresenceProvider,
-	cfg          *config.Config,
-	logger       *slog.Logger,
+	pubSub contracts.PubSub,
+	cfg *config.Config,
+	logger *slog.Logger,
 ) *Service {
 	return &Service{
 		msgRepo:      msgRepo,
 		roomProv:     roomProv,
 		userProv:     userProv,
 		presenceProv: presenceProv,
+		pubSub:       pubSub,
 		config:       cfg,
 		logger:       logger,
 	}
@@ -61,7 +65,19 @@ func (s *Service) SendMessage(ctx context.Context, senderID, roomID, content str
 	}
 
 	s.logger.Info("message sent", "message_id", msg.ID, "room_id", roomID)
-	// TODO: Publish real-time event via Redis
+
+	// Publish the message to the Redis channel
+	channel := fmt.Sprintf("room:%s:messages", roomID)
+	messageJSON, err := json.Marshal(msg)
+	if err != nil {
+		s.logger.Error("failed to marshal message for Redis", "error", err)
+		return msg, nil
+	}
+
+	if err := s.pubSub.Publish(ctx, channel, string(messageJSON)); err != nil {
+		s.logger.Error("failed to publish message to Redis", "error", err)
+	}
+
 	return msg, nil
 }
 
@@ -148,7 +164,7 @@ func (s *Service) GetMessageReceipts(ctx context.Context, actorID, messageID str
 	if err != nil {
 		return nil, err
 	}
-	// This provider needs to be implemented on the RoomRepository to get all members
+	
 	allMembers, err := s.roomProv.ListMembers(ctx, msg.RoomID)
 	if err != nil {
 		return nil, err
